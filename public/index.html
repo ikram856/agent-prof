@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MEHDI 2.0</title>
+<style>
+:root{--bg:#f2f6fc;--card:#fff;--tx:#11233d;--mut:#5d6f87;--ac:#1d6cb3;--ac2:#e3eefa;--bd:#d9e4f2;--me:#1d6cb3;--pour:#1d6cb3;--contre:#12305c;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1726;--card:#15233a;--tx:#e8f0fb;--mut:#8fa4c0;--ac:#6aaef0;--ac2:#1b2f4d;--bd:#26395a;--me:#2f78c4;--pour:#6aaef0;--contre:#c9defa;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0d1726;--card:#15233a;--tx:#e8f0fb;--mut:#8fa4c0;--ac:#6aaef0;--ac2:#1b2f4d;--bd:#26395a;--me:#2f78c4;--pour:#6aaef0;--contre:#c9defa;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input{font:inherit;color:var(--tx)}
+header{background:#fff;color:#1d6cb3;padding:10px 16px;border-bottom:3px solid #1d6cb3}
+.hin{max-width:1080px;margin:0 auto;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.logo{height:84px;width:auto;display:block}
+.ht{flex:1;min-width:160px;font-size:14px;font-weight:600}
+.live{display:inline-flex;align-items:center;gap:6px;background:#e3eefa;border-radius:999px;padding:4px 10px;font-size:13px;color:#1d6cb3}
+.dot{width:8px;height:8px;border-radius:50%;background:#1d6cb3;animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.3}}
+.hb{background:#1d6cb3;border:0;color:#fff;border-radius:10px;padding:6px 12px;cursor:pointer;font-size:13px}
+main{max-width:1080px;margin:0 auto;padding:14px;display:grid;grid-template-columns:1fr 320px;gap:14px}
+@media (max-width:860px){main{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:14px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}
+.tabs button{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:10px 6px;cursor:pointer}
+.tabs button.on{background:var(--ac2);border-color:var(--ac);color:var(--ac);font-weight:600}
+main>section.card{display:flex;flex-direction:column}
+#chatw{flex:1;min-height:min(52vh,480px);position:relative}
+#chat{position:absolute;inset:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:4px 2px}
+.msg{display:flex;gap:8px;align-items:flex-end;max-width:92%}
+.msg.me{align-self:flex-end;flex-direction:row-reverse}
+.av{width:30px;height:30px;border-radius:50%;background:var(--ac2);display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+.me .av{background:var(--me)}
+.bub{padding:9px 13px;border-radius:16px;background:var(--ac2);white-space:pre-wrap;overflow-wrap:anywhere;border-bottom-left-radius:4px}
+.me .bub{background:var(--me);color:#fff;border-bottom-left-radius:16px;border-bottom-right-radius:4px}
+.time{font-size:11px;color:var(--mut);margin-top:2px}
+.typing span{display:inline-block;width:6px;height:6px;margin:0 2px;border-radius:50%;background:var(--mut);animation:b 1s infinite}
+.typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
+@keyframes b{50%{transform:translateY(-4px)}}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.chips button{background:var(--card);border:1px solid var(--bd);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chips button:hover{border-color:var(--ac)}
+.send{display:flex;gap:8px}
+.send input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:11px 12px}
+.send button{border:0;border-radius:12px;padding:0 16px;cursor:pointer}
+#go{background:var(--ac);color:#fff;font-weight:600}
+:root[data-theme="dark"] #go{color:#0d1726}
+#mic{background:var(--bg);border:1px solid var(--bd)}
+#mic.rec{background:var(--contre);color:#fff}
+.send button:disabled{opacity:.5}
+aside{display:flex;flex-direction:column;gap:14px}
+aside h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--mut)}
+label{font-size:12px;color:var(--mut);display:block;margin:6px 0 2px}
+aside input{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:7px 10px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+.stats b{display:block;font-size:22px}
+.stats span{font-size:11px;color:var(--mut)}
+.timer{font-size:38px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums}
+.timer.low{color:var(--contre)}
+.btns{display:flex;gap:6px}
+.btns button,.wide{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:7px;cursor:pointer;font-size:14px}
+.wide{width:100%;background:var(--ac);color:#fff;border:0;font-weight:600;padding:9px}
+#sum{white-space:pre-wrap;font-size:14px;margin-top:10px;display:none;background:var(--bg);border-radius:10px;padding:10px}
+body.proj .bub{font-size:22px}
+body.proj #chatw{min-height:60vh}
+#poll{display:none}
+body.debat #poll{display:block}
+body.debat aside .card:not(#poll){display:none}
+.turn{text-align:center;font-size:14px;color:var(--mut);margin-bottom:8px}
+.vb{border:2px solid var(--bd);background:var(--bg);border-radius:12px;padding:10px;font-weight:700;cursor:pointer}
+#dur{flex:1;width:auto}
+/* sondage */
+.vote{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+.vb.pour{background:var(--pour);border-color:var(--pour);color:#fff}
+.vb.contre{background:var(--contre);border-color:var(--contre);color:#fff}
+:root[data-theme="dark"] .vb{color:#0d1726}
+.vb:active{transform:scale(.97)}
+.bar{display:flex;height:22px;border-radius:999px;overflow:hidden;background:var(--bd)}
+.bar i{display:block;height:100%;transition:width .4s}
+
+.res{display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;margin-top:10px}
+.res div{background:var(--bg);border-radius:12px;padding:8px}
+.res b{display:block;font-size:28px;line-height:1.1}
+.res span{font-size:12px;color:var(--mut)}
+.res .p b{color:var(--pour)}.res .c b{color:var(--contre)}
+#bp{background:var(--pour)}#bc{background:var(--contre)}
+#lead{margin:10px 0 6px;text-align:center;font-weight:700;background:var(--ac2);color:var(--ac);border-radius:10px;padding:8px}
+
+#rz{font-size:12px;padding:4px 8px;margin-top:2px}
+body.proj main{grid-template-columns:1fr 360px}
+body.proj aside .card:not(#poll){display:none}
+body.proj:not(.debat) main{grid-template-columns:1fr 360px}
+body.proj .timer{font-size:72px}
+body.proj .vb{font-size:22px;padding:16px}
+body.proj .turn{font-size:18px}
+body.proj .res b{font-size:44px}
+@media (max-width:860px){body.proj main,body.proj:not(.debat) main{grid-template-columns:1fr}}
+aside select,aside textarea{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:7px 10px;font:inherit;color:var(--tx)}
+aside textarea{resize:vertical}
+.hint{font-size:12px;color:var(--mut);margin-top:6px;min-height:16px}
+/* modale import URL */
+#urlModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center}
+#urlModal.open{display:flex}
+#urlBox{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:20px;width:min(500px,94vw);display:flex;flex-direction:column;gap:10px}
+#urlBox h4{margin:0;font-size:15px}
+#urlBox input,#urlBox textarea{width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:8px 10px;font:inherit;color:var(--tx)}
+#urlBox textarea{resize:vertical;min-height:110px}
+.url-btns{display:flex;gap:8px;justify-content:flex-end}
+.url-btns button{border:0;border-radius:10px;padding:7px 16px;cursor:pointer;font:inherit}
+#urlCancel{background:var(--bg);border:1px solid var(--bd);color:var(--tx)}
+#urlSubmit{background:var(--ac);color:#fff;font-weight:600}
+#urlSubmit:disabled{opacity:.5}
+#urlMsg{font-size:12px;color:var(--mut);min-height:16px}
+</style>
+</head>
+<body>
+<header><div class="hin">
+  <img class="logo" alt="MEHDI 2.0" src="__LOGO__">
+  <div class="ht" id="sub"></div>
+  <span class="live"><i class="dot"></i>Séance en cours</span>
+  <button class="hb" id="projb">📽️ Mode projection</button>
+</div></header>
+
+<main>
+<section class="card">
+  <div class="tabs" id="tabs">
+    <button data-m="cours" class="on">💬 Questions</button>
+    <button data-m="debat">⚖️ Débat</button>
+    <button data-m="quiz">📝 Quiz</button>
+  </div>
+  <div id="chatw"><div id="chat"></div></div>
+  <div class="chips" id="chips"></div>
+  <div class="send">
+    <button id="mic" title="Dicter" style="display:none">🎤</button>
+    <input id="msg" placeholder="Écris ta question ou ton argument…" autocomplete="off">
+    <button id="go">Envoyer</button>
+  </div>
+</section>
+
+<aside>
+  <div class="card" id="poll">
+    <h3>Débat &amp; Sondage</h3>
+
+    <!-- Sondage (en haut) -->
+    <input id="pq" placeholder="Question du sondage (facultatif)">
+    <div class="vote">
+      <button class="vb pour" data-v="p">👍 POUR</button>
+      <button class="vb contre" data-v="c">👎 CONTRE</button>
+    </div>
+    <div class="bar"><i id="bp" style="width:0"></i><i id="bc" style="width:0"></i></div>
+    <div class="res">
+      <div class="p"><b id="pp">0 %</b><span id="pn">POUR · 0 vote</span></div>
+      <div class="c"><b id="pc">0 %</b><span id="cn">CONTRE · 0 vote</span></div>
+    </div>
+    <div id="lead">Aucun vote pour l'instant</div>
+    <button class="btns" id="rz" style="width:100%;background:var(--bg);border:1px solid var(--bd);border-radius:10px;cursor:pointer;margin-top:4px">↺ Remettre le sondage à zéro</button>
+
+    <!-- Séparateur -->
+    <hr style="border:none;border-top:1px solid var(--bd);margin:16px 0 12px">
+
+    <!-- Chrono -->
+    <div class="turn" id="turn">Temps de parole</div>
+    <div class="timer" id="tm">02:00</div>
+    <div class="btns" style="margin:8px 0 0">
+      <select id="dur" title="Durée de parole"><option value="60">1 min</option><option value="120" selected>2 min</option><option value="180">3 min</option></select>
+      <button id="t1">▶ Start</button><button id="t2">↺ Reset</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Cours de la séance</h3>
+    <label for="lesson">Leçon</label>
+    <select id="lesson"><option value="">— Aucune leçon (général) —</option></select>
+    <div class="btns" style="margin-top:8px">
+      <button id="upb" type="button">📎 PDF / PPTX</button>
+      <button id="urlb" type="button">🔗 Liens web</button>
+      <button id="delb" type="button" title="Supprimer la leçon">🗑️</button>
+    </div>
+    <input type="file" id="up" accept=".pdf,.pptx,.txt,.md" hidden>
+    <div id="lmsg" class="hint"></div>
+    <label for="extra">Notes du jour (facultatif)</label>
+    <textarea id="extra" rows="4" placeholder="Ex : insister sur le rôle de la lumière des écrans. Niveau : 3e année collège."></textarea>
+    <label for="prof">Professeur</label><input id="prof" value="EL MEHDI BELHAJ">
+    <label for="mat">Matière</label><input id="mat" value="SVT">
+  </div>
+  <div class="card">
+    <h3>Séance</h3>
+    <div class="stats">
+      <div><b id="s1">0</b><span>messages</span></div>
+      <div><b id="s2">0</b><span>questions</span></div>
+      <div><b id="s3">0</b><span>min</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h3>Aide au prof</h3>
+    <button class="wide" id="sumb">✨ Résumé de la séance</button>
+    <div id="sum"></div>
+  </div>
+</aside>
+</main>
+
+<!-- Modale import URL -->
+<div id="urlModal" role="dialog" aria-modal="true" aria-labelledby="urlTitle">
+  <div id="urlBox">
+    <h4 id="urlTitle">🔗 Importer depuis des liens web</h4>
+    <div>
+      <label style="font-size:12px;color:var(--mut)">Nom de la leçon</label>
+      <input id="urlName" placeholder="Ex : Les séismes – Wikipedia" maxlength="80">
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--mut)">Liens (1 par ligne, max 5)</label>
+      <textarea id="urlList" placeholder="https://fr.wikipedia.org/wiki/Séisme&#10;https://www.futura-sciences.com/planete/..."></textarea>
+    </div>
+    <div id="urlMsg"></div>
+    <div class="url-btns">
+      <button id="urlCancel">Annuler</button>
+      <button id="urlSubmit">Importer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const MODES = {
+  cours:{hello:"Bonjour ! Je suis l’assistant de la séance. Pose-moi une question sur le cours : je t’aide à réfléchir plutôt que de te donner la réponse toute faite.",
+    chips:["Explique-moi le sujet simplement","Donne-moi un exemple concret","Je ne comprends pas, aide-moi"]},
+  debat:{hello:"Le débat est ouvert ! Demande-moi une question de débat tirée du cours, ou propose la tienne. Ensuite, choisis ton camp (POUR ou CONTRE) et donne ton premier argument. Je modère et je relance.",
+    chips:["Propose une question de débat sur le cours","Je suis POUR","Je suis CONTRE","Fais la synthèse du débat"]},
+  quiz:{hello:"C’est l’heure du quiz ! Écris « Commencer » et je te pose une première question sur le cours.",
+    chips:["Commencer","Question suivante","Plus difficile","Mon score ?"]}
+};
+const $=id=>document.getElementById(id);
+let mode="cours",history=[],busy=false,nq=0,t0=Date.now();
+const chat=$("chat");
+const hm=()=>new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
+
+function add(role,text){
+  const m=document.createElement("div");m.className="msg "+(role==="me"?"me":"bot");
+  const a=document.createElement("div");a.className="av";a.textContent=role==="me"?"🧑‍🎓":"🤖";
+  const w=document.createElement("div");
+  const b=document.createElement("div");b.className="bub";
+  if(text==null){b.innerHTML='<span class="typing"><span></span><span></span><span></span></span>'}else b.textContent=text;
+  const t=document.createElement("div");t.className="time";t.textContent=hm();
+  w.append(b,t);m.append(a,w);chat.appendChild(m);chat.scrollTop=chat.scrollHeight;return b;
+}
+function stats(){$("s1").textContent=history.length;$("s2").textContent=nq;$("s3").textContent=Math.floor((Date.now()-t0)/60000)}
+function lessonName(){const o=$("lesson").selectedOptions[0];return o&&o.value?o.textContent:""}
+function sub(){$("sub").textContent=$("prof").value+" · "+$("mat").value+(lessonName()?" · "+lessonName():"")}
+function setMode(m){
+  mode=m;history=[];chat.innerHTML="";
+  document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+  document.body.classList.toggle("debat",m==="debat");
+  add("bot",MODES[m].hello);
+  const c=$("chips");c.innerHTML="";
+  MODES[m].chips.forEach(t=>{const b=document.createElement("button");b.textContent=t;b.onclick=()=>send(t);c.appendChild(b)});
+  stats();
+}
+async function api(messages){
+  const r=await fetch("/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages,mode,lessonId:$("lesson").value,extra:$("extra").value})});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||!d.reply)throw new Error(d.error||"Erreur");
+  return d.reply;
+}
+async function ask(prompt){return {text:await api([{role:"user",content:prompt.slice(-1900)}])}}
+async function send(text){
+  text=(text||$("msg").value).trim();
+  if(!text||busy)return;
+  $("msg").value="";add("me",text);history.push({role:"user",content:(mode==="debat"&&side?"[Camp "+side+"] ":"")+text});
+  if(/\?\s*$/.test(text)||mode==="cours")nq++;
+  stats();
+  busy=true;$("go").disabled=true;
+  const out=add("bot",null);
+  try{
+    const reply=await api(history);
+    out.textContent=reply;history.push({role:"assistant",content:reply});
+  }catch(e){
+    /* affiche le vrai message du serveur (config, surcharge...) ; message par défaut si le serveur ne répond pas du tout */
+    out.textContent=(e instanceof TypeError||!e.message||e.message==="Erreur")
+      ?"Le serveur ne répond pas ou l’IA est très sollicitée, réessaie dans quelques secondes."
+      :e.message;
+  }
+  busy=false;$("go").disabled=false;stats();
+}
+/* sondage POUR / CONTRE */
+let votes={p:0,c:0};
+try{const s=JSON.parse(localStorage.getItem("sondage")||"null");if(s)votes={p:+s.p||0,c:+s.c||0}}catch(e){}
+const pct=n=>{const t=votes.p+votes.c;return t?Math.round(n*100/t):0};
+const nv=n=>n+(n>1?" votes":" vote");
+function pollText(){
+  const t=votes.p+votes.c;if(!t)return"";
+  const q=$("pq").value.trim();
+  const lead=votes.p===votes.c?"Égalité parfaite":"Majorité : "+(votes.p>votes.c?"POUR (OUI)":"CONTRE (NON)")+" avec "+pct(Math.max(votes.p,votes.c))+" %";
+  return "Sondage"+(q?" « "+q+" »":"")+" : "+pct(votes.p)+" % disent POUR/OUI ("+nv(votes.p)+") et "+pct(votes.c)+" % disent CONTRE/NON ("+nv(votes.c)+"), sur "+t+" votants. "+lead+".";
+}
+function renderPoll(){
+  const t=votes.p+votes.c,p=pct(votes.p),c=t?100-p:0;
+  $("bp").style.width=p+"%";$("bc").style.width=c+"%";
+  $("pp").textContent=p+" %";$("pc").textContent=c+" %";
+  $("pn").textContent="POUR · "+nv(votes.p);$("cn").textContent="CONTRE · "+nv(votes.c);
+  $("lead").textContent=!t?"Aucun vote pour l'instant":votes.p===votes.c?"⚖️ Égalité : "+p+" % – "+c+" %":"🏆 Majorité : "+(votes.p>votes.c?"POUR":"CONTRE")+" ("+Math.max(p,c)+" %)";
+  try{localStorage.setItem("sondage",JSON.stringify(votes))}catch(e){}
+}
+document.querySelectorAll(".vb").forEach(b=>b.onclick=()=>{votes[b.dataset.v]++;renderPoll()});
+$("rz").onclick=()=>{if(votes.p+votes.c&&!confirm("Remettre le sondage à zéro ?"))return;votes={p:0,c:0};renderPoll()};
+async function summary(){
+  const box=$("sum");box.style.display="block";
+  const pt=pollText();
+  if(history.length<2){box.textContent=(pt?pt+"\n\n":"")+"Pas encore assez d’échanges pour faire un résumé.";return}
+  box.textContent="Analyse en cours…";
+  const tr=history.map(h=>(h.role==="user"?"Élève : ":"Assistant : ")+h.content).join("\n");
+  try{
+    const r=await ask("Tu aides le professeur "+$("prof").value+" ("+$("mat").value+", cours : "+(lessonName()||"général")+"). Voici les échanges de la séance (mode "+mode+") :\n"+tr+(pt?"\n"+pt:"")+
+      "\n\nFais un résumé pour le prof, en français, en 4 parties courtes : 1) Points abordés 2) Ce que disent ceux qui sont POUR/OUI et ce que disent ceux qui sont CONTRE/NON 3) Difficultés ou incompréhensions repérées 4) Suggestion pour la suite du cours.");
+    box.textContent=(pt?"📊 "+pt+"\n\n":"")+r.text;
+  }catch(e){box.textContent=(pt?pt+"\n\n":"")+"Impossible de générer le résumé pour l’instant."}
+}
+/* chrono */
+let dur=120,left=120,iv=null,side="";
+const fmt=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+function tick(){$("tm").textContent=fmt(left);$("tm").classList.toggle("low",left<=15)}
+function beep(){try{const c=new (window.AudioContext||window.webkitAudioContext)();const o=c.createOscillator();o.connect(c.destination);o.frequency.value=660;o.start();setTimeout(()=>{o.stop();c.close()},400)}catch(e){}}
+function stopT(){clearInterval(iv);iv=null;$("t1").textContent="▶ Start"}
+function startT(){
+  if(left<=0)left=dur;
+  clearInterval(iv);$("t1").textContent="⏸ Pause";
+  iv=setInterval(()=>{left--;tick();if(left<=0){stopT();beep();$("turn").textContent="⏰ Temps écoulé !"}},1000);
+}
+function setTurn(){$("turn").textContent="Temps de parole"}
+$("t1").onclick=()=>{if(iv)stopT();else startT()};
+$("t2").onclick=()=>{stopT();left=dur;tick();setTurn()};
+$("dur").onchange=()=>{dur=+$("dur").value;stopT();left=dur;tick();setTurn()};
+/* divers */
+$("go").onclick=()=>send();
+$("msg").addEventListener("keydown",e=>{if(e.key==="Enter")send()});
+document.querySelectorAll("#tabs button").forEach(b=>b.onclick=()=>setMode(b.dataset.m));
+$("sumb").onclick=summary;
+$("projb").onclick=()=>{const on=document.body.classList.toggle("proj");$("projb").textContent=on?"↩ Quitter la projection":"📽️ Mode projection"};
+["prof","mat"].forEach(i=>$(i).addEventListener("input",sub));
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){
+  $("mic").style.display="block";
+  $("mic").onclick=()=>{try{
+    const r=new SR();r.lang="fr-FR";$("mic").classList.add("rec");
+    r.onresult=e=>{$("msg").value=e.results[0][0].transcript};
+    r.onend=()=>$("mic").classList.remove("rec");r.onerror=()=>$("mic").classList.remove("rec");r.start();
+  }catch(e){$("mic").style.display="none"}};
+}
+let pw="";
+async function profFetch(url,opts){
+  const go=()=>fetch(url,{...opts,headers:{...(opts.headers||{}),...(pw?{"x-prof-password":pw}:{})}});
+  let r=await go();
+  if(r.status===401){pw=prompt("Mot de passe professeur :")||"";if(pw)r=await go()}
+  return r;
+}
+async function loadLessons(sel){
+  try{
+    const d=await (await fetch("/api/lessons")).json();
+    const s=$("lesson");s.innerHTML='<option value="">— Aucune leçon (général) —</option>';
+    d.lessons.forEach(l=>{const o=document.createElement("option");o.value=l.id;o.textContent=l.name;s.appendChild(o)});
+    if(sel)s.value=sel;
+    if(!d.lessons.length)$("lmsg").textContent="Aucune leçon importée pour l’instant.";
+    sub();
+  }catch(e){$("lmsg").textContent="Impossible de charger les leçons."}
+}
+$("upb").onclick=()=>$("up").click();
+$("up").onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  $("lmsg").textContent="Import en cours…";
+  try{
+    const r=await profFetch("/api/lessons?name="+encodeURIComponent(f.name)+"&filename="+encodeURIComponent(f.name),{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:f});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||"Import impossible");
+    await loadLessons(d.id);
+    $("lmsg").textContent="Leçon ajoutée ("+d.chars+" caractères)."+(d.tronque?" Texte coupé à 60 000 caractères.":"");
+    setMode(mode);
+  }catch(err){$("lmsg").textContent=err instanceof TypeError?"Le serveur ne répond pas. Vérifie qu’il est lancé, puis réessaie.":err.message}
+  e.target.value="";
+};
+$("delb").onclick=async()=>{
+  const id=$("lesson").value;if(!id)return;
+  if(!confirm("Supprimer la leçon « "+lessonName()+" » ?"))return;
+  const r=await profFetch("/api/lessons?id="+encodeURIComponent(id),{method:"DELETE"});
+  if(r.ok){await loadLessons();$("lmsg").textContent="Leçon supprimée.";setMode(mode)}else $("lmsg").textContent="Suppression impossible."
+};
+$("lesson").onchange=()=>{sub();setMode(mode)};
+/* import URL */
+$("urlb").onclick=()=>{$("urlModal").classList.add("open");$("urlName").focus()};
+$("urlCancel").onclick=()=>closeUrlModal();
+$("urlModal").addEventListener("click",e=>{if(e.target===$("urlModal"))closeUrlModal()});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeUrlModal()});
+function closeUrlModal(){$("urlModal").classList.remove("open");$("urlMsg").textContent=""}
+$("urlSubmit").onclick=async()=>{
+  const name=$("urlName").value.trim()||"Ressources web";
+  const lines=$("urlList").value.split("\n").map(l=>l.trim()).filter(l=>l.startsWith("http"));
+  if(!lines.length){$("urlMsg").textContent="Colle au moins un lien valide (http...).";return}
+  if(lines.length>5){$("urlMsg").textContent="Maximum 5 liens à la fois.";return}
+  $("urlSubmit").disabled=true;$("urlMsg").textContent="Récupération en cours…";
+  try{
+    const r=await profFetch("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({urls:lines,name})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(d.error||"Import impossible");
+    await loadLessons(d.id);
+    $("lmsg").textContent="Leçon ajoutée depuis "+lines.length+" lien(s) ("+d.chars+" caractères)."+(d.tronque?" Texte coupé à 60 000 car.":"")+(d.warnings&&d.warnings.length?" ⚠️ "+d.warnings.length+" lien(s) ignoré(s).":"");
+    setMode(mode);
+    closeUrlModal();
+    $("urlName").value="";$("urlList").value="";
+  }catch(err){$("urlMsg").textContent=err.message}
+  $("urlSubmit").disabled=false;
+};
+
+sub();tick();renderPoll();setMode("cours");loadLessons();setInterval(stats,30000);
+</script>
+</body>
+</html>
