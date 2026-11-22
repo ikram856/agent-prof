@@ -1,0 +1,7 @@
+.env
+node_modules/
+cours/
+conversations/
+
+# copies de sauvegarde
+*.ancien.*
