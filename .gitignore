@@ -1,6 +1,7 @@
 .env
 node_modules/
 cours/
+data/
 conversations/
 
 # copies de sauvegarde

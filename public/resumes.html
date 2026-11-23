@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Résumés de cours · MEHDI 2.0</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="/common.css">
+<style>
+.grid{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+#list{display:flex;flex-direction:column;gap:6px}
+.item{text-align:left;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:9px 11px;cursor:pointer;width:100%}
+.item:hover{border-color:var(--ac)}
+.item.on{border-color:var(--ac);background:var(--ac2)}
+.item .t{font-weight:600}
+.item .s{font-size:12px;color:var(--mut)}
+.tools{margin-bottom:12px}
+/* La fiche : même rendu à l'écran et dans le PDF */
+.sheet{background:#fff;color:#11233d;border-radius:12px;padding:28px 34px;border:1px solid var(--bd);max-width:900px}
+.sheet-head{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1d6cb3;padding-bottom:12px;margin-bottom:16px}
+.sheet-head img{height:84px;width:auto}
+.sheet-head h1{margin:0;font-size:26px;color:#1d6cb3}
+.sheet-head .meta{font-size:14px;color:#5d6f87}
+.sheet h2{color:#1d6cb3;font-size:18px;margin:18px 0 8px}
+.sheet .texte{white-space:pre-wrap;line-height:1.6}
+.sheet .sig{display:flex;justify-content:flex-end;margin-top:26px}
+.sheet .sig div{text-align:center;min-width:230px}
+.sheet .sig img{display:block;max-height:90px;max-width:230px;margin:4px auto}
+.sheet .sig .line{border-top:1px solid #11233d;padding-top:4px;font-weight:600}
+.sheet .foot{margin-top:18px;font-size:11px;color:#5d6f87;text-align:center}
+.carte-box{border:1px solid #d9e4f2;border-radius:12px;padding:8px;background:#fff}
+/* Éditeur (prof) */
+.edit{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+@media (max-width:860px){.edit{grid-template-columns:1fr}}
+.edit textarea{min-height:260px;font-size:14px}
+.edit textarea#carte{font-family:ui-monospace,Consolas,monospace}
+.empty{color:var(--mut);text-align:center;margin:40px auto}
+@media print{
+  @page{size:A4;margin:12mm}
+  #top,.no-print,#listcard,.tools,.edit{display:none!important}
+  body{background:#fff}
+  .wrap{padding:0;max-width:none}.grid{display:block}
+  #view{border:0;padding:0;background:none}
+  .sheet{border:0;padding:0;max-width:none}
+  .carte-box{break-inside:avoid}
+  .sig{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="wrap">
+  <h1 class="no-print">📄 Résumés de cours</h1>
+  <div class="grid">
+    <div class="card" id="listcard"><div id="list"></div></div>
+    <div class="card" id="view"><p class="empty">Choisis un cours à gauche.</p></div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { $, api } = MEHDI;
+let me, profile = {}, lessons = [], current = null, data = null, editing = false;
+
+async function loadList() {
+  const d = await api("/api/lessons");
+  lessons = d.lessons;
+  const list = $("list"); list.innerHTML = "";
+  if (!lessons.length) { const p = document.createElement("p"); p.className = "muted"; p.textContent = me.role === "prof" ? "Importe d’abord une leçon depuis la page Séance." : "Aucun cours pour ta classe pour l’instant."; list.appendChild(p); return; }
+  for (const l of lessons) {
+    const b = document.createElement("button"); b.className = "item" + (l.id === current ? " on" : "");
+    const t = document.createElement("div"); t.className = "t"; t.textContent = l.name;
+    const s = document.createElement("div"); s.className = "s";
+    s.textContent = (l.resume ? "✅ Résumé prêt" : "⏳ Pas encore de résumé") + (me.role === "prof" ? " · " + (l.className || "toutes les classes") : "");
+    b.append(t, s); b.onclick = () => open(l.id);
+    list.appendChild(b);
+  }
+}
+
+async function open(id) {
+  current = id; editing = false;
+  history.replaceState(null, "", "?cours=" + encodeURIComponent(id));
+  document.querySelectorAll(".item").forEach((b, i) => b.classList.toggle("on", lessons[i]?.id === id));
+  $("view").innerHTML = "<p class='empty'>Chargement…</p>";
+  try { data = await api("/api/resume?lessonId=" + encodeURIComponent(id)); show(); }
+  catch (e) { $("view").textContent = e.message; }
+}
+
+/* Affiche la fiche (et l'éditeur pour le prof) */
+function show() {
+  const v = $("view"); v.innerHTML = "";
+  const isProf = me.role === "prof", has = !!(data.texte || data.carte);
+
+  const tools = document.createElement("div"); tools.className = "row tools";
+  const mk = (label, cls, fn) => { const b = document.createElement("button"); b.className = "btn " + cls; b.textContent = label; b.onclick = fn; tools.appendChild(b); return b; };
+  if (has) mk("📄 Télécharger en PDF", "", () => print());
+  if (isProf) {
+    mk(editing ? "👁️ Voir la fiche" : "✏️ Modifier", "sec", () => { editing = !editing; show(); });
+    const gen = mk("✨ " + (has ? "Refaire" : "Préparer") + " avec l’IA", "sec", async () => {
+      if (has && !confirm("Remplacer le résumé actuel par une nouvelle proposition de l’IA ? (rien n’est enregistré tant que tu ne cliques pas sur Enregistrer)")) return;
+      gen.disabled = true; gen.textContent = "⏳ L’IA prépare le résumé…";
+      try { const r = await api("/api/resume/generate", { method: "POST", body: { lessonId: current } }); data.texte = r.texte; data.carte = r.carte; editing = true; show(); hint("Proposition de l’IA : relis, corrige puis clique sur 💾 Enregistrer.", "ok"); }
+      catch (e) { gen.disabled = false; gen.textContent = "✨ Préparer avec l’IA"; hint(e.message, "err"); }
+    });
+  }
+  const msg = document.createElement("div"); msg.className = "hint"; msg.id = "msg";
+  v.append(tools, msg);
+
+  if (isProf && editing) {
+    const ed = document.createElement("div"); ed.className = "edit";
+    const c1 = document.createElement("div"), c2 = document.createElement("div");
+    c1.innerHTML = '<label for="texte">Résumé du cours</label>';
+    c2.innerHTML = '<label for="carte">Carte mentale (1re ligne = titre, « - » = idée, deux espaces + « - » = détail)</label>';
+    const ta = document.createElement("textarea"); ta.id = "texte"; ta.value = data.texte || "";
+    const tc = document.createElement("textarea"); tc.id = "carte"; tc.value = data.carte || "Titre du cours\n- Idée principale\n  - détail";
+    ta.oninput = () => { data.texte = ta.value; drawSheet(); };
+    tc.oninput = () => { data.carte = tc.value; drawSheet(); };
+    c1.appendChild(ta); c2.appendChild(tc);
+    const save = document.createElement("button"); save.className = "btn"; save.textContent = "💾 Enregistrer"; save.style.marginTop = "8px";
+    save.onclick = async () => {
+      try { const r = await api("/api/resume", { method: "PUT", body: { lessonId: current, texte: ta.value, carte: tc.value } }); data.updated = r.updated; hint("Résumé enregistré. Les élèves de la classe peuvent le voir.", "ok"); loadList(); drawSheet(); }
+      catch (e) { hint(e.message, "err"); }
+    };
+    c1.appendChild(save);
+    ed.append(c1, c2);
+    v.appendChild(ed);
+  }
+
+  if (!has && !editing) {
+    const p = document.createElement("p"); p.className = "empty";
+    p.textContent = isProf ? "Pas encore de résumé. Clique sur « ✨ Préparer avec l’IA » ou « ✏️ Modifier » pour l’écrire." : "Le professeur n’a pas encore préparé le résumé de ce cours.";
+    v.appendChild(p);
+    return;
+  }
+  const sheet = document.createElement("div"); sheet.className = "sheet"; sheet.id = "sheet";
+  v.appendChild(sheet);
+  drawSheet();
+}
+function hint(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.className = "hint " + (cls || ""); } }
+
+function drawSheet() {
+  const s = $("sheet"); if (!s) return;
+  s.innerHTML = "";
+  const head = document.createElement("div"); head.className = "sheet-head";
+  const logo = new Image(); logo.src = "/logo.jpg"; logo.alt = "MEHDI 2.0";
+  const hd = document.createElement("div");
+  const h1 = document.createElement("h1"); h1.textContent = data.lessonName;
+  const meta = document.createElement("div"); meta.className = "meta";
+  meta.textContent = [profile.matiere, data.className, profile.nom ? "Prof. " + profile.nom : "", data.updated ? "Mis à jour le " + new Date(data.updated).toLocaleDateString("fr-FR") : ""].filter(Boolean).join(" · ");
+  hd.append(h1, meta); head.append(logo, hd);
+  s.appendChild(head);
+
+  if (data.texte) {
+    const h2 = document.createElement("h2"); h2.textContent = "📝 Résumé";
+    const t = document.createElement("div"); t.className = "texte"; t.textContent = data.texte;
+    s.append(h2, t);
+  }
+  if (data.carte && data.carte.trim()) {
+    const h2 = document.createElement("h2"); h2.textContent = "🧠 Carte mentale";
+    const box = document.createElement("div"); box.className = "carte-box";
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    box.appendChild(svg); s.append(h2, box);
+    MEHDI.drawCarte(svg, data.carte);
+  }
+  // Signature du professeur
+  const sig = document.createElement("div"); sig.className = "sig";
+  const sd = document.createElement("div");
+  const lab = document.createElement("div"); lab.className = "muted"; lab.style.fontSize = "13px"; lab.textContent = "Signature du professeur";
+  sd.appendChild(lab);
+  if (profile.signature) { const im = new Image(); im.src = profile.signature; im.alt = "Signature"; sd.appendChild(im); }
+  else { const sp = document.createElement("div"); sp.style.height = "60px"; sd.appendChild(sp); }
+  const line = document.createElement("div"); line.className = "line"; line.textContent = profile.nom || "Le professeur";
+  sd.appendChild(line); sig.appendChild(sd); s.appendChild(sig);
+  const foot = document.createElement("div"); foot.className = "foot"; foot.textContent = "Fiche de révision · MEHDI 2.0";
+  s.appendChild(foot);
+  if (me.role === "prof" && !profile.signature) hint("Astuce : ajoute ta signature dans ⚙️ Espace prof pour qu’elle apparaisse sur le PDF.", "");
+}
+
+(async () => {
+  me = await MEHDI.init("resumes");
+  profile = await api("/api/profile");
+  document.title = "Résumés de cours · " + (profile.nom || "MEHDI 2.0");
+  await loadList();
+  const id = new URLSearchParams(location.search).get("cours");
+  if (id && lessons.some(l => l.id === id)) open(id);
+  else if (lessons.length === 1) open(lessons[0].id);
+})();
+</script>
+</body>
+</html>

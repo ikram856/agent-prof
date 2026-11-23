@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion · MEHDI 2.0</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="/common.css">
+<style>
+body{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.box{width:min(420px,100%);text-align:center}
+.box .logo{width:150px;height:auto;margin:0 auto 6px;display:block}
+.tabs{display:flex;gap:6px;margin:12px 0 4px}
+.tabs button{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:10px 6px;cursor:pointer}
+.tabs button.on{background:var(--ac2);border-color:var(--ac);color:var(--ac);font-weight:600}
+form{text-align:left}
+form .btn{width:100%;margin-top:14px;padding:11px}
+</style>
+</head>
+<body>
+<div class="card box">
+  <img class="logo" src="/logo.jpg" alt="MEHDI 2.0">
+
+  <!-- Premier lancement : création du compte professeur -->
+  <form id="setup" hidden>
+    <h2>Bienvenue ! Crée le mot de passe du professeur</h2>
+    <p class="muted" style="font-size:14px;margin:0">Il servira à gérer les classes, les cours et l'historique.</p>
+    <label for="sp1">Mot de passe (6 caractères minimum)</label>
+    <input id="sp1" type="password" autocomplete="new-password" required minlength="6">
+    <label for="sp2">Retape le mot de passe</label>
+    <input id="sp2" type="password" autocomplete="new-password" required minlength="6">
+    <button class="btn">Créer le compte professeur</button>
+    <div class="hint err" id="smsg"></div>
+  </form>
+
+  <div id="login" hidden>
+    <div class="tabs">
+      <button type="button" data-t="eleve" class="on">🎓 Élève</button>
+      <button type="button" data-t="prof">👨‍🏫 Professeur</button>
+    </div>
+
+    <form id="feleve">
+      <label for="cls">Ma classe</label>
+      <select id="cls" required></select>
+      <label for="prenom">Mon prénom</label>
+      <input id="prenom" autocomplete="given-name" maxlength="40" required placeholder="Ex : Sara">
+      <label for="cpw">Mot de passe de la classe</label>
+      <input id="cpw" type="password" autocomplete="current-password" required>
+      <button class="btn">Entrer en classe</button>
+    </form>
+
+    <form id="fprof" hidden>
+      <label for="ppw">Mot de passe du professeur</label>
+      <input id="ppw" type="password" autocomplete="current-password" required>
+      <button class="btn">Se connecter</button>
+    </form>
+    <div class="hint err" id="msg"></div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { $, api } = MEHDI;
+const go = () => { location.href = "/"; };
+
+async function start() {
+  let me;
+  try { me = await api("/api/me", { noRedirect: true }); return go(); }   // déjà connecté
+  catch (e) { me = await fetch("/api/me").then(r => r.json()).catch(() => ({})); }
+  if (me.setup) { $("setup").hidden = false; $("sp1").focus(); return; }
+  $("login").hidden = false;
+  const s = $("cls");
+  s.innerHTML = "";
+  if (!me.classes || !me.classes.length) {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "Aucune classe pour l'instant"; s.appendChild(o);
+  } else {
+    const o = document.createElement("option"); o.value = ""; o.textContent = "— Choisis ta classe —"; s.appendChild(o);
+    for (const c of me.classes) { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; s.appendChild(o); }
+    try { const last = localStorage.getItem("mehdi-classe"); if (last) s.value = last; } catch {}
+    try { const p = localStorage.getItem("mehdi-prenom"); if (p) $("prenom").value = p; } catch {}
+  }
+}
+
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  $("feleve").hidden = b.dataset.t !== "eleve";
+  $("fprof").hidden = b.dataset.t !== "prof";
+  $("msg").textContent = "";
+  (b.dataset.t === "prof" ? $("ppw") : $("prenom")).focus();
+});
+
+$("setup").onsubmit = async e => {
+  e.preventDefault();
+  if ($("sp1").value !== $("sp2").value) { $("smsg").textContent = "Les deux mots de passe ne sont pas identiques."; return; }
+  try { await api("/api/setup", { method: "POST", body: { password: $("sp1").value }, noRedirect: true }); location.href = "/prof.html"; }
+  catch (err) { $("smsg").textContent = err.message; }
+};
+$("feleve").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api("/api/login", { method: "POST", noRedirect: true, body: { role: "eleve", classId: $("cls").value, prenom: $("prenom").value, password: $("cpw").value } });
+    try { localStorage.setItem("mehdi-classe", $("cls").value); localStorage.setItem("mehdi-prenom", $("prenom").value.trim()); } catch {}
+    go();
+  } catch (err) { $("msg").textContent = err.message; }
+};
+$("fprof").onsubmit = async e => {
+  e.preventDefault();
+  try { await api("/api/login", { method: "POST", noRedirect: true, body: { role: "prof", password: $("ppw").value } }); go(); }
+  catch (err) { $("msg").textContent = err.message; }
+};
+start();
+</script>
+</body>
+</html>

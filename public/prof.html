@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Espace prof · MEHDI 2.0</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="/common.css">
+<style>
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--bd);vertical-align:middle}
+th{font-size:12px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+td select{padding:5px 8px}
+.mini{padding:5px 9px;font-size:13px}
+#pad{width:100%;height:170px;background:#fff;border:2px dashed var(--bd);border-radius:12px;touch-action:none;cursor:crosshair;display:block}
+#sigprev{max-height:80px;max-width:240px;background:#fff;border-radius:8px;padding:4px;display:block;margin-top:6px}
+.full{grid-column:1/-1}
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="wrap">
+  <h1>⚙️ Espace prof</h1>
+  <div class="grid">
+
+    <div class="card">
+      <h2>🏫 Classes</h2>
+      <p class="muted" style="font-size:14px;margin-top:0">Chaque classe a son mot de passe. Les élèves choisissent leur classe, tapent leur prénom et ce mot de passe.</p>
+      <table><thead><tr><th>Classe</th><th>Élèves</th><th></th></tr></thead><tbody id="classes"></tbody></table>
+      <h3 style="margin-top:16px">Ajouter une classe</h3>
+      <form id="addcls" class="row">
+        <input id="cname" placeholder="Ex : 1re année collège" maxlength="60" style="flex:2;min-width:160px" required>
+        <input id="cpw" placeholder="Mot de passe de la classe" style="flex:1;min-width:140px" required minlength="4">
+        <button class="btn">➕ Ajouter</button>
+      </form>
+      <div class="hint" id="cmsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>✍️ Ma signature et mon nom</h2>
+      <p class="muted" style="font-size:14px;margin-top:0">Ils apparaissent en bas de chaque fiche de résumé en PDF.</p>
+      <div class="row">
+        <div style="flex:1;min-width:160px"><label for="nom">Nom du professeur</label><input id="nom" maxlength="80"></div>
+        <div style="flex:1;min-width:120px"><label for="mat">Matière</label><input id="mat" maxlength="60"></div>
+      </div>
+      <label>Signe dans le cadre avec la souris (ou le doigt)</label>
+      <canvas id="pad" width="800" height="340"></canvas>
+      <div class="row" style="margin-top:8px">
+        <button class="btn sec" id="clear" type="button">🧽 Effacer</button>
+        <button class="btn" id="saveprof" type="button">💾 Enregistrer</button>
+      </div>
+      <div id="sigbox" hidden><label>Signature actuelle</label><img id="sigprev" alt="Signature actuelle"></div>
+      <div class="hint" id="pmsg"></div>
+    </div>
+
+    <div class="card full">
+      <h2>📚 Leçons par classe</h2>
+      <p class="muted" style="font-size:14px;margin-top:0">Une leçon « Toutes les classes » est visible par tout le monde. Pour importer une leçon, va sur la page Séance.</p>
+      <table><thead><tr><th>Leçon</th><th>Classe</th><th>Résumé</th><th></th></tr></thead><tbody id="lessons"></tbody></table>
+      <div class="hint" id="lmsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>🔑 Mot de passe du professeur</h2>
+      <form id="pwform">
+        <label for="np1">Nouveau mot de passe (6 caractères minimum)</label>
+        <input id="np1" type="password" autocomplete="new-password" minlength="6" required>
+        <label for="np2">Retape-le</label>
+        <input id="np2" type="password" autocomplete="new-password" minlength="6" required>
+        <button class="btn" style="margin-top:10px">Changer</button>
+      </form>
+      <div class="hint" id="pwmsg"></div>
+    </div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { $, api } = MEHDI;
+let classes = [];
+const msg = (id, t, cls = "") => { $(id).textContent = t; $(id).className = "hint " + cls; };
+const btn = (label, cls, fn) => { const b = document.createElement("button"); b.className = "btn mini " + cls; b.textContent = label; b.onclick = fn; return b; };
+
+/* ---------- Classes ---------- */
+async function loadClasses() {
+  classes = (await api("/api/classes")).classes;
+  const tb = $("classes"); tb.innerHTML = "";
+  if (!classes.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 3; td.className = "muted"; td.textContent = "Aucune classe. Ajoute ta première classe ci-dessous."; }
+  for (const c of classes) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = c.name;
+    tr.insertCell().textContent = c.eleves;
+    const td = tr.insertCell(); td.className = "row"; td.style.justifyContent = "flex-end";
+    td.append(
+      btn("🔑 Mot de passe", "sec", async () => {
+        const pw = prompt("Nouveau mot de passe pour « " + c.name + " » (4 caractères minimum) :");
+        if (!pw) return;
+        try { await api("/api/classes", { method: "PUT", body: { id: c.id, password: pw } }); msg("cmsg", "Mot de passe de « " + c.name + " » changé.", "ok"); }
+        catch (e) { msg("cmsg", e.message, "err"); }
+      }),
+      btn("✏️", "sec", async () => {
+        const n = prompt("Nouveau nom de la classe :", c.name);
+        if (!n) return;
+        try { await api("/api/classes", { method: "PUT", body: { id: c.id, name: n } }); loadAll(); } catch (e) { msg("cmsg", e.message, "err"); }
+      }),
+      btn("🗑️", "danger", async () => {
+        if (!confirm("Supprimer la classe « " + c.name + " » ? Les élèves ne pourront plus se connecter. Leurs conversations restent dans l’historique.")) return;
+        await api("/api/classes?id=" + encodeURIComponent(c.id), { method: "DELETE" }); loadAll();
+      })
+    );
+  }
+}
+$("addcls").onsubmit = async e => {
+  e.preventDefault();
+  try {
+    await api("/api/classes", { method: "POST", body: { name: $("cname").value, password: $("cpw").value } });
+    msg("cmsg", "Classe « " + $("cname").value.trim() + " » ajoutée. Donne son mot de passe aux élèves.", "ok");
+    $("cname").value = ""; $("cpw").value = "";
+    loadAll();
+  } catch (err) { msg("cmsg", err.message, "err"); }
+};
+
+/* ---------- Leçons ---------- */
+async function loadLessons() {
+  const { lessons } = await api("/api/lessons");
+  const tb = $("lessons"); tb.innerHTML = "";
+  if (!lessons.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 4; td.className = "muted"; td.textContent = "Aucune leçon. Importe-en une depuis la page Séance."; }
+  for (const l of lessons) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = l.name;
+    const sel = document.createElement("select");
+    for (const [v, t] of [["", "Toutes les classes"], ...classes.map(c => [c.id, c.name])]) { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.appendChild(o); }
+    sel.value = l.classId;
+    sel.onchange = async () => {
+      try { await api("/api/lessons", { method: "PUT", body: { id: l.id, classId: sel.value } }); msg("lmsg", "« " + l.name + " » → " + sel.selectedOptions[0].textContent, "ok"); }
+      catch (e) { msg("lmsg", e.message, "err"); }
+    };
+    tr.insertCell().appendChild(sel);
+    const r = tr.insertCell(); const a = document.createElement("a"); a.href = "/resumes.html?cours=" + encodeURIComponent(l.id); a.textContent = l.resume ? "✅ Voir" : "⏳ Préparer"; r.appendChild(a);
+    const td = tr.insertCell();
+    td.appendChild(btn("🗑️", "danger", async () => {
+      if (!confirm("Supprimer la leçon « " + l.name + " » et son résumé ?")) return;
+      await api("/api/lessons?id=" + encodeURIComponent(l.id), { method: "DELETE" }); loadLessons();
+    }));
+  }
+}
+
+/* ---------- Signature ---------- */
+const pad = $("pad"), ctx = pad.getContext("2d");
+let drawing = false, drawn = false, last = null;
+function pos(e) { const r = pad.getBoundingClientRect(); return { x: (e.clientX - r.left) * pad.width / r.width, y: (e.clientY - r.top) * pad.height / r.height }; }
+function clearPad() { ctx.clearRect(0, 0, pad.width, pad.height); drawn = false; }
+pad.addEventListener("pointerdown", e => { drawing = true; last = pos(e); pad.setPointerCapture(e.pointerId); });
+pad.addEventListener("pointermove", e => {
+  if (!drawing) return;
+  const p = pos(e);
+  ctx.strokeStyle = "#11233d"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+  last = p; drawn = true;
+});
+["pointerup", "pointercancel", "pointerleave"].forEach(ev => pad.addEventListener(ev, () => { drawing = false; }));
+$("clear").onclick = clearPad;
+
+/* Recadre la signature autour du tracé (PNG transparent) */
+function signaturePNG() {
+  const d = ctx.getImageData(0, 0, pad.width, pad.height).data;
+  let x0 = pad.width, y0 = pad.height, x1 = 0, y1 = 0;
+  for (let y = 0; y < pad.height; y++) for (let x = 0; x < pad.width; x++)
+    if (d[(y * pad.width + x) * 4 + 3] > 0) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 <= x0) return "";
+  const m = 8, w = x1 - x0 + m * 2, h = y1 - y0 + m * 2;
+  const c = document.createElement("canvas"); c.width = w; c.height = h;
+  c.getContext("2d").drawImage(pad, x0 - m, y0 - m, w, h, 0, 0, w, h);
+  return c.toDataURL("image/png");
+}
+$("saveprof").onclick = async () => {
+  const body = { nom: $("nom").value, matiere: $("mat").value };
+  if (drawn) body.signature = signaturePNG();
+  try {
+    const p = await api("/api/profile", { method: "PUT", body });
+    showSig(p.signature); clearPad();
+    msg("pmsg", "Enregistré." + (body.signature ? " Ta signature apparaîtra sur les PDF." : ""), "ok");
+    $("sub").textContent = [p.nom, p.matiere].filter(Boolean).join(" · ") || "MEHDI 2.0";
+  } catch (e) { msg("pmsg", e.message, "err"); }
+};
+function showSig(s) { $("sigbox").hidden = !s; if (s) $("sigprev").src = s; }
+
+/* ---------- Mot de passe prof ---------- */
+$("pwform").onsubmit = async e => {
+  e.preventDefault();
+  if ($("np1").value !== $("np2").value) return msg("pwmsg", "Les deux mots de passe ne sont pas identiques.", "err");
+  try { await api("/api/profile", { method: "PUT", body: { newPassword: $("np1").value } }); msg("pwmsg", "Mot de passe changé.", "ok"); $("np1").value = $("np2").value = ""; }
+  catch (err) { msg("pwmsg", err.message, "err"); }
+};
+
+async function loadAll() { await loadClasses(); await loadLessons(); }
+(async () => {
+  await MEHDI.init("prof", { profOnly: true });
+  const p = await api("/api/profile");
+  $("nom").value = p.nom || ""; $("mat").value = p.matiere || "";
+  showSig(p.signature);
+  await loadAll();
+  if (!classes.length) $("cname").focus();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Historique · MEHDI 2.0</title>
+<link rel="icon" href="/favicon.png">
+<link rel="stylesheet" href="/common.css">
+<style>
+.grid{display:grid;grid-template-columns:380px 1fr;gap:14px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:1fr}}
+.filters{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px}
+.filters input{grid-column:1/-1}
+#list{display:flex;flex-direction:column;gap:6px;max-height:70vh;overflow-y:auto}
+.item{text-align:left;background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:9px 11px;cursor:pointer;width:100%}
+.item:hover{border-color:var(--ac)}
+.item.on{border-color:var(--ac);background:var(--ac2)}
+.item .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .s{font-size:12px;color:var(--mut)}
+.group{font-size:12px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 2px 0}
+#view{min-height:60vh;display:flex;flex-direction:column}
+#head{border-bottom:1px solid var(--bd);padding-bottom:10px;margin-bottom:10px}
+#msgs{display:flex;flex-direction:column;gap:10px}
+.empty{color:var(--mut);text-align:center;margin:auto}
+@media print{#top,.no-print,#listcard{display:none!important}.grid{display:block}body{background:#fff}.card{border:0}}
+</style>
+</head>
+<body>
+<header id="top"></header>
+<div class="wrap">
+  <h1 id="title">🕘 Historique des conversations</h1>
+  <div class="grid">
+    <div class="card" id="listcard">
+      <div class="filters" id="filters">
+        <select id="fcls" hidden><option value="">Toutes les classes</option><option value="prof">Professeur</option></select>
+        <select id="fmode"><option value="">Tous les modes</option><option value="cours">💬 Questions</option><option value="debat">⚖️ Débat</option><option value="quiz">📝 Quiz</option></select>
+        <input id="fq" placeholder="🔎 Rechercher un élève, un cours, un mot du titre…">
+      </div>
+      <div id="count" class="hint"></div>
+      <div id="list"></div>
+    </div>
+    <div class="card" id="view"><p class="empty">Choisis une conversation à gauche pour la lire.</p></div>
+  </div>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const { $, api } = MEHDI;
+let me, convs = [], current = null;
+
+async function loadList() {
+  const p = new URLSearchParams();
+  if ($("fcls").value) p.set("classId", $("fcls").value);
+  if ($("fmode").value) p.set("mode", $("fmode").value);
+  if ($("fq").value.trim()) p.set("q", $("fq").value.trim());
+  const d = await api("/api/history?" + p);
+  convs = d.conversations;
+  const list = $("list"); list.innerHTML = "";
+  $("count").textContent = convs.length + " conversation" + (convs.length > 1 ? "s" : "");
+  if (!convs.length) { const e = document.createElement("p"); e.className = "muted"; e.textContent = "Aucune conversation pour l’instant."; list.appendChild(e); return; }
+  // Le prof voit les conversations regroupées par élève
+  let lastGroup = null;
+  const sorted = me.role === "prof"
+    ? [...convs].sort((a, b) => (a.className + a.student).localeCompare(b.className + b.student, "fr") || b.updated.localeCompare(a.updated))
+    : convs;
+  for (const c of sorted) {
+    if (me.role === "prof") {
+      const g = c.role === "prof" ? "👨‍🏫 Professeur" : "🎓 " + c.student + " · " + c.className;
+      if (g !== lastGroup) { const h = document.createElement("div"); h.className = "group"; h.textContent = g; list.appendChild(h); lastGroup = g; }
+    }
+    const b = document.createElement("button"); b.className = "item" + (current === c.id ? " on" : "");
+    const t = document.createElement("div"); t.className = "t"; t.textContent = c.title || "(sans titre)";
+    const s = document.createElement("div"); s.className = "s";
+    s.textContent = MEHDI.MODES[c.mode] + " · " + (c.lessonName || "sans leçon") + " · " + c.count + " msg · " + MEHDI.fmtDate(c.updated) + (c.archived ? "" : " · en cours");
+    b.append(t, s);
+    b.onclick = () => open(c.id);
+    list.appendChild(b);
+  }
+}
+
+async function open(id) {
+  current = id;
+  document.querySelectorAll(".item").forEach(x => x.classList.remove("on"));
+  const v = $("view"); v.innerHTML = "<p class='empty'>Chargement…</p>";
+  try {
+    const { conv } = await api("/api/history/one?id=" + encodeURIComponent(id));
+    loadList().catch(() => {});
+    v.innerHTML = "";
+    const head = document.createElement("div"); head.id = "head";
+    const h = document.createElement("h2"); h.textContent = conv.title || "(sans titre)";
+    const s = document.createElement("div"); s.className = "muted"; s.style.fontSize = "14px";
+    s.textContent = (conv.role === "prof" ? "👨‍🏫 Professeur" : "🎓 " + conv.student + " · " + conv.className) + " · " + MEHDI.MODES[conv.mode] +
+      " · " + (conv.lessonName || "sans leçon") + " · commencée le " + MEHDI.fmtDate(conv.created);
+    const row = document.createElement("div"); row.className = "row no-print"; row.style.marginTop = "8px";
+    const pr = document.createElement("button"); pr.className = "btn sec"; pr.textContent = "🖨️ Imprimer / PDF"; pr.onclick = () => print();
+    row.appendChild(pr);
+    if (me.role === "prof") {
+      const del = document.createElement("button"); del.className = "btn danger"; del.textContent = "🗑️ Supprimer";
+      del.onclick = async () => {
+        if (!confirm("Supprimer définitivement cette conversation ?")) return;
+        await api("/api/history?id=" + encodeURIComponent(id), { method: "DELETE" });
+        current = null; v.innerHTML = "<p class='empty'>Conversation supprimée.</p>"; loadList();
+      };
+      row.appendChild(del);
+    }
+    head.append(h, s, row);
+    const msgs = document.createElement("div"); msgs.id = "msgs";
+    for (const m of conv.messages) MEHDI.bubble(msgs, m.role === "user" ? (conv.role === "prof" ? "prof" : "eleve") : "bot", m.text, MEHDI.fmtDate(m.t));
+    if (conv.pending) MEHDI.bubble(msgs, "bot", conv.partial || null);
+    v.append(head, msgs);
+  } catch (e) { v.innerHTML = ""; const p = document.createElement("p"); p.className = "empty"; p.textContent = e.message; v.appendChild(p); }
+}
+
+let tq = null;
+$("fq").oninput = () => { clearTimeout(tq); tq = setTimeout(loadList, 300); };
+$("fcls").onchange = loadList;
+$("fmode").onchange = loadList;
+
+(async () => {
+  me = await MEHDI.init("historique");
+  if (me.role === "prof") {
+    $("fcls").hidden = false;
+    const d = await api("/api/classes");
+    for (const c of d.classes) { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; $("fcls").appendChild(o); }
+  } else {
+    $("title").textContent = "🕘 Mes conversations";
+    $("fmode").style.gridColumn = "1/-1";
+  }
+  await loadList();
+  const id = new URLSearchParams(location.search).get("id");
+  if (id) open(id);
+})();
+</script>
+</body>
+</html>
