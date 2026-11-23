@@ -55,7 +55,7 @@
     const top = $("top");
     top.innerHTML = "";
     const hin = document.createElement("div"); hin.className = "hin";
-    const logo = new Image(); logo.className = "logo"; logo.src = "/logo.jpg"; logo.alt = "MEHDI 2.0";
+    const logo = new Image(); logo.className = "logo"; logo.src = "/logo.png"; logo.alt = "MEHDI 2.0";
     const ht = document.createElement("div"); ht.className = "ht"; ht.id = "sub";
     ht.textContent = [me.profile.nom, me.profile.matiere].filter(Boolean).join(" · ") || "MEHDI 2.0";
     const nav = document.createElement("nav");
