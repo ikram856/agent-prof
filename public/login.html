@@ -40,13 +40,12 @@ form .btn{width:100%;margin-top:14px;padding:11px}
     </div>
 
     <form id="feleve">
-      <label for="cls">Ma classe</label>
-      <select id="cls" required></select>
-      <label for="prenom">Mon prénom</label>
-      <input id="prenom" autocomplete="given-name" maxlength="40" required placeholder="Ex : Sara">
-      <label for="cpw">Mot de passe de la classe</label>
-      <input id="cpw" type="password" autocomplete="current-password" required>
+      <label for="ident">Mon identifiant</label>
+      <input id="ident" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="60" required placeholder="Ex : sara.benali">
+      <label for="cpw">Mon mot de passe</label>
+      <input id="cpw" type="password" autocomplete="current-password" required placeholder="Ex : kabo-rite-47">
       <button class="btn">Entrer en classe</button>
+      <p class="muted" style="font-size:13px;margin:10px 0 0">Ton identifiant et ton mot de passe sont sur la fiche donnée par ton professeur.</p>
     </form>
 
     <form id="fprof" hidden>
@@ -69,16 +68,7 @@ async function start() {
   catch (e) { me = await fetch("/api/me").then(r => r.json()).catch(() => ({})); }
   if (me.setup) { $("setup").hidden = false; $("sp1").focus(); return; }
   $("login").hidden = false;
-  const s = $("cls");
-  s.innerHTML = "";
-  if (!me.classes || !me.classes.length) {
-    const o = document.createElement("option"); o.value = ""; o.textContent = "Aucune classe pour l'instant"; s.appendChild(o);
-  } else {
-    const o = document.createElement("option"); o.value = ""; o.textContent = "— Choisis ta classe —"; s.appendChild(o);
-    for (const c of me.classes) { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; s.appendChild(o); }
-    try { const last = localStorage.getItem("mehdi-classe"); if (last) s.value = last; } catch {}
-    try { const p = localStorage.getItem("mehdi-prenom"); if (p) $("prenom").value = p; } catch {}
-  }
+  try { const l = localStorage.getItem("mehdi-login"); if (l) { $("ident").value = l; $("cpw").focus(); } else $("ident").focus(); } catch {}
 }
 
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
@@ -86,7 +76,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
   $("feleve").hidden = b.dataset.t !== "eleve";
   $("fprof").hidden = b.dataset.t !== "prof";
   $("msg").textContent = "";
-  (b.dataset.t === "prof" ? $("ppw") : $("prenom")).focus();
+  (b.dataset.t === "prof" ? $("ppw") : $("ident")).focus();
 });
 
 $("setup").onsubmit = async e => {
@@ -98,8 +88,8 @@ $("setup").onsubmit = async e => {
 $("feleve").onsubmit = async e => {
   e.preventDefault();
   try {
-    await api("/api/login", { method: "POST", noRedirect: true, body: { role: "eleve", classId: $("cls").value, prenom: $("prenom").value, password: $("cpw").value } });
-    try { localStorage.setItem("mehdi-classe", $("cls").value); localStorage.setItem("mehdi-prenom", $("prenom").value.trim()); } catch {}
+    await api("/api/login", { method: "POST", noRedirect: true, body: { role: "eleve", login: $("ident").value.trim(), password: $("cpw").value } });
+    try { localStorage.setItem("mehdi-login", $("ident").value.trim().toLowerCase()); } catch {}
     go();
   } catch (err) { $("msg").textContent = err.message; }
 };

@@ -22,7 +22,12 @@
 #head{border-bottom:1px solid var(--bd);padding-bottom:10px;margin-bottom:10px}
 #msgs{display:flex;flex-direction:column;gap:10px}
 .empty{color:var(--mut);text-align:center;margin:auto}
-@media print{#top,.no-print,#listcard{display:none!important}.grid{display:block}body{background:#fff}.card{border:0}}
+.sumbox{white-space:pre-wrap;background:var(--ac2);border-radius:12px;padding:12px 14px;margin-bottom:12px;font-size:15px;line-height:1.5}
+.sumbox h3{margin:0 0 6px;font-size:16px}
+.sumbox .muted{font-size:12px}
+#seance{border-top:1px solid var(--bd);margin-top:12px;padding-top:10px}
+#seance .row{gap:6px}
+@media print{#top,.no-print,#listcard{display:none!important}.grid{display:block}body{background:#fff}.card{border:0}.sumbox{background:#fff;border:1px solid #999}}
 </style>
 </head>
 <body>
@@ -38,6 +43,15 @@
       </div>
       <div id="count" class="hint"></div>
       <div id="list"></div>
+      <div id="seance" hidden>
+        <b>📋 Résumé de la séance d’une classe</b>
+        <p class="hint" style="margin:4px 0 8px">Toutes les questions des élèves de la classe choisie, un jour donné, résumées pour toi.</p>
+        <div class="row">
+          <select id="scls" style="flex:1"></select>
+          <input type="date" id="sdate" style="flex:1">
+        </div>
+        <button class="btn wide" id="sgo" style="margin-top:6px">📋 Voir le résumé de la séance</button>
+      </div>
     </div>
     <div class="card" id="view"><p class="empty">Choisis une conversation à gauche pour la lire.</p></div>
   </div>
@@ -103,13 +117,74 @@ async function open(id) {
       };
       row.appendChild(del);
     }
+    const sb = document.createElement("button"); sb.className = "btn";
+    row.prepend(sb);
     head.append(h, s, row);
+    const box = document.createElement("div"); box.className = "sumbox"; box.hidden = true;
+    const n = conv.messages.length;
+    const showSum = sm => {
+      box.hidden = !sm; box.innerHTML = "";
+      if (sm) {
+        const t = document.createElement("h3"); t.textContent = "📝 Résumé de la séance";
+        const d = document.createElement("div"); d.className = "muted"; d.textContent = "Fait le " + MEHDI.fmtDate(sm.updated) + " · d’après " + sm.count + " messages";
+        const x = document.createElement("div"); x.textContent = sm.texte;
+        box.append(t, x, d);
+      }
+      sb.disabled = !!sm && sm.count >= n;
+      sb.textContent = !sm ? "📝 Résumé de la séance" : sm.count < n ? "🔄 Mettre à jour le résumé" : "✅ Résumé à jour";
+    };
+    showSum(conv.summary);
+    sb.onclick = async () => {
+      sb.disabled = true; sb.textContent = "⏳ Résumé en cours…";
+      try { showSum((await api("/api/conv/summary", { method: "POST", body: { id } })).summary); }
+      catch (e) { showSum(conv.summary); alert(e.message); }
+    };
+    if (conv.pending || n < 2) sb.hidden = true;
+    head.appendChild(box);
     const msgs = document.createElement("div"); msgs.id = "msgs";
     for (const m of conv.messages) MEHDI.bubble(msgs, m.role === "user" ? (conv.role === "prof" ? "prof" : "eleve") : "bot", m.text, MEHDI.fmtDate(m.t));
     if (conv.pending) MEHDI.bubble(msgs, "bot", conv.partial || null);
     v.append(head, msgs);
   } catch (e) { v.innerHTML = ""; const p = document.createElement("p"); p.className = "empty"; p.textContent = e.message; v.appendChild(p); }
 }
+
+/* ---------- Résumé de la séance d'une classe (prof) ---------- */
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+function seanceView(info, cls, date) {
+  current = null; document.querySelectorAll(".item").forEach(x => x.classList.remove("on"));
+  const v = $("view"); v.innerHTML = "";
+  const head = document.createElement("div"); head.id = "head";
+  const h = document.createElement("h2"); h.textContent = "📋 Séance du " + new Date(date + "T12:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const s = document.createElement("div"); s.className = "muted"; s.textContent = "🎓 " + cls + " · " + info.eleves + " élève(s) · " + info.questions + " question(s)";
+  const row = document.createElement("div"); row.className = "row no-print"; row.style.marginTop = "8px";
+  const gen = document.createElement("button"); gen.className = "btn";
+  const pr = document.createElement("button"); pr.className = "btn sec"; pr.textContent = "🖨️ Imprimer / PDF"; pr.onclick = () => print();
+  row.append(gen, pr); head.append(h, s, row);
+  const box = document.createElement("div"); box.className = "sumbox";
+  const show = sm => {
+    box.innerHTML = "";
+    if (!sm) { box.hidden = true; gen.textContent = "✨ Faire le résumé de la séance"; pr.hidden = true; return; }
+    box.hidden = false; pr.hidden = false; gen.textContent = "🔄 Refaire le résumé";
+    const x = document.createElement("div"); x.textContent = sm.texte;
+    const d = document.createElement("div"); d.className = "muted"; d.textContent = "Fait le " + MEHDI.fmtDate(sm.updated) + " · d’après " + sm.questions + " questions de " + sm.eleves + " élève(s)";
+    box.append(x, d);
+  };
+  show(info.summary);
+  if (!info.questions) { gen.hidden = true; pr.hidden = true; const p = document.createElement("p"); p.className = "empty"; p.textContent = "Aucune question d’élève de cette classe ce jour-là."; v.append(head, p); return; }
+  gen.onclick = async () => {
+    gen.disabled = true; gen.textContent = "⏳ L’IA lit les " + info.questions + " questions…";
+    try { show((await api("/api/seance/summary", { method: "POST", body: { classId: $("scls").value, date } })).summary); }
+    catch (e) { alert(e.message); show(info.summary); }
+    gen.disabled = false;
+  };
+  v.append(head, box);
+}
+$("sgo").onclick = async () => {
+  const date = $("sdate").value, cid = $("scls").value;
+  if (!cid || !date) return alert("Choisis la classe et la date.");
+  try { seanceView(await api("/api/seance?classId=" + encodeURIComponent(cid) + "&date=" + date), $("scls").selectedOptions[0].textContent, date); }
+  catch (e) { alert(e.message); }
+};
 
 let tq = null;
 $("fq").oninput = () => { clearTimeout(tq); tq = setTimeout(loadList, 300); };
@@ -121,7 +196,13 @@ $("fmode").onchange = loadList;
   if (me.role === "prof") {
     $("fcls").hidden = false;
     const d = await api("/api/classes");
-    for (const c of d.classes) { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; $("fcls").appendChild(o); }
+    for (const c of d.classes) {
+      const o = document.createElement("option"); o.value = c.id; o.textContent = c.name; $("fcls").appendChild(o);
+      $("scls").appendChild(o.cloneNode(true));
+    }
+    $("seance").hidden = !d.classes.length;
+    $("sdate").value = today(); $("sdate").max = today();
+    $("fcls").addEventListener("change", () => { if ($("fcls").value && $("fcls").value !== "prof") $("scls").value = $("fcls").value; });
   } else {
     $("title").textContent = "🕘 Mes conversations";
     $("fmode").style.gridColumn = "1/-1";

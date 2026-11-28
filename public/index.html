@@ -38,7 +38,9 @@ aside{display:flex;flex-direction:column;gap:14px}
 .btns{display:flex;gap:6px}
 .btns button{flex:1;background:var(--bg);border:1px solid var(--bd);border-radius:10px;padding:7px;cursor:pointer;font-size:14px}
 .wide{width:100%}
-#sum{white-space:pre-wrap;font-size:14px;margin-top:10px;display:none;background:var(--bg);border-radius:10px;padding:10px}
+#sum{white-space:pre-wrap;font-size:14px;margin-top:10px;background:var(--bg);border-radius:10px;padding:10px;max-height:55vh;overflow-y:auto}
+#sum:empty{display:none}
+#sumlink{display:block;margin-top:8px;font-size:14px}
 /* débat : sondage + chrono (prof) */
 #poll{display:none}
 body.debat.isprof #poll{display:block}
@@ -149,10 +151,12 @@ body.proj .res b{font-size:44px}
     </div>
   </div>
 
-  <div class="card" id="aide" hidden>
-    <h3>Aide au prof</h3>
-    <button class="btn wide" id="sumb">✨ Résumé de la séance</button>
-    <div id="sum"></div>
+  <div class="card" id="aide">
+    <h3>📝 Résumé de la séance</h3>
+    <p class="hint" id="sumhint" style="margin-top:0">L’IA résume ce que tu as appris d’après tes questions et ses réponses.</p>
+    <button class="btn wide" id="sumb">✨ Faire le résumé</button>
+    <div id="sum" aria-live="polite"></div>
+    <a id="sumlink" hidden>📄 Ouvrir pour imprimer / PDF</a>
   </div>
 </aside>
 </main>
@@ -212,6 +216,7 @@ function stats() {
   $("s1").textContent = msgs.length;
   $("s2").textContent = msgs.filter(m => m.role === "user").length;
   $("s3").textContent = conv ? Math.max(0, Math.floor((Date.now() - new Date(conv.created)) / 60000)) : 0;
+  showSummary();
 }
 function setBusy(b) { busy = b; $("go").disabled = b; }
 
@@ -379,20 +384,27 @@ $("urlSubmit").onclick = async () => {
   $("urlSubmit").disabled = false;
 };
 
-/* ---------- Résumé de la séance (prof) ---------- */
+/* ---------- Résumé de la séance (élève et prof) ---------- */
+let sumBusy = false;
+function showSummary() {
+  if (sumBusy) return;
+  const n = conv?.messages.length || 0, sm = conv?.summary;
+  $("sum").textContent = sm ? sm.texte : "";
+  $("sumlink").hidden = !sm;
+  if (sm) $("sumlink").href = "/historique.html?id=" + encodeURIComponent(conv.id);
+  $("sumb").textContent = !sm ? "✨ Faire le résumé" : sm.count < n ? "🔄 Mettre à jour le résumé (" + (n - sm.count) + " nouveau" + (n - sm.count > 1 ? "x" : "") + " message" + (n - sm.count > 1 ? "s" : "") + ")" : "✅ Résumé à jour";
+  $("sumb").disabled = !!sm && sm.count >= n;
+}
 $("sumb").onclick = async () => {
-  const box = $("sum"); box.style.display = "block";
-  const pt = pollText();
-  const msgs = conv?.messages || [];
-  if (msgs.length < 2) { box.textContent = (pt ? pt + "\n\n" : "") + "Pas encore assez d’échanges pour faire un résumé."; return; }
-  box.textContent = "Analyse en cours…";
-  const tr = msgs.map(h => (h.role === "user" ? "Élève : " : "Assistant : ") + h.text).join("\n");
-  const l = lessons.find(x => x.id === lessonId());
+  if (busy) return alert("Attends la fin de la réponse de l’IA.");
+  if (!conv?.messages.some(m => m.role === "user") || conv.messages.length < 2) { $("sum").textContent = "Pose d’abord au moins une question : le résumé se fait à partir de vos échanges."; return; }
+  const id = conv.id;
+  sumBusy = true; $("sumb").disabled = true; $("sumb").textContent = "⏳ Résumé en cours…"; $("sum").textContent = "";
   try {
-    const d = await api("/api/ask", { method: "POST", body: { prompt: "Cours : " + (l?.name || "général") + ". Voici les échanges de la séance (mode " + mode + ") :\n" + tr + (pt ? "\n" + pt : "") +
-      "\n\nFais un résumé pour le prof, en 4 parties courtes : 1) Points abordés 2) Arguments POUR/OUI et CONTRE/NON 3) Difficultés ou incompréhensions repérées 4) Suggestion pour la suite du cours." } });
-    box.textContent = (pt ? "📊 " + pt + "\n\n" : "") + d.reply;
-  } catch (e) { box.textContent = (pt ? pt + "\n\n" : "") + "Impossible de générer le résumé : " + e.message; }
+    const d = await api("/api/conv/summary", { method: "POST", body: { id, poll: isProf ? pollText() : "" } });
+    if (conv?.id === id) conv.summary = d.summary;
+  } catch (e) { sumBusy = false; showSummary(); $("sum").textContent = "⚠️ " + e.message; return; }
+  sumBusy = false; showSummary();
 };
 
 /* ---------- Sondage POUR / CONTRE ---------- */
@@ -456,7 +468,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden && !b
   isProf = me.role === "prof";
   document.body.classList.toggle("isprof", isProf);
   $("profLesson").hidden = !isProf;
-  $("aide").hidden = !isProf;
+  if (isProf) $("sumhint").textContent = "Bilan de cette conversation : points abordés, difficultés, conseil pour la suite (le sondage est inclus).";
   $("msg").placeholder = isProf ? "Écris un message (projeté au tableau)…" : "Écris ta question ou ton argument…";
   // Boutons en haut : séance en cours + projection (prof)
   const live = document.createElement("span"); live.className = "live"; live.innerHTML = '<i class="dot"></i>Séance en cours';

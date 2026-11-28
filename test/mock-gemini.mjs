@@ -9,6 +9,11 @@ function replyFor(body) {
   const last = body.contents?.at(-1)?.parts?.[0]?.text || "";
   if (/fiche de révision/.test(last))
     return "RÉSUMÉ:\nUn séisme est une vibration du sol.\n- Il naît au foyer.\n\nCARTE:\nLes séismes\n- Origine\n  - rupture des roches\n- Prévention\n  - normes parasismiques";
+  if (/RÉSUMÉ DE SÉANCE/.test(last)) {
+    const sys = body.system_instruction?.parts?.[0]?.text || "";
+    const qui = /CE QUE J'AI APPRIS/.test(sys) ? "élève" : /PARTICIPATION/.test(sys) ? "classe" : "prof";
+    return "Résumé pour " + qui + " : " + (last.match(/^Élève : /gm) || []).length + " question(s) d'élève.";
+  }
   if (/Début de séance/.test(last)) return "Question de débat : faut-il construire près des failles ? Es-tu POUR ou CONTRE ?";
   return "Réponse à : " + last.slice(0, 60);
 }

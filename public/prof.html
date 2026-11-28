@@ -17,6 +17,22 @@ td select{padding:5px 8px}
 #pad{width:100%;height:170px;background:#fff;border:2px dashed var(--bd);border-radius:12px;touch-action:none;cursor:crosshair;display:block}
 #sigprev{max-height:80px;max-width:240px;background:#fff;border-radius:8px;padding:4px;display:block;margin-top:6px}
 .full{grid-column:1/-1}
+#names{min-height:150px;font-size:14px}
+.newbox{background:var(--ac2);border-radius:12px;padding:12px;margin-top:12px}
+.pw{font-family:ui-monospace,Consolas,monospace;font-weight:700;letter-spacing:.03em}
+.small{font-size:12px;color:var(--mut)}
+/* Fiches élèves : visibles seulement à l'impression */
+#fiches{display:none}
+@media print{
+  @page{size:A4;margin:10mm}
+  body{background:#fff}
+  body > *:not(#fiches){display:none!important}
+  #fiches{display:grid!important;grid-template-columns:1fr 1fr;gap:6mm}
+  .fiche{border:1.5px dashed #555;border-radius:8px;padding:5mm;break-inside:avoid;color:#000;font:13px system-ui,sans-serif}
+  .fiche img{height:16mm;float:right}
+  .fiche b{font-size:15px}
+  .fiche .code{font-family:ui-monospace,Consolas,monospace;font-size:16px;font-weight:700}
+}
 </style>
 </head>
 <body>
@@ -27,12 +43,11 @@ td select{padding:5px 8px}
 
     <div class="card">
       <h2>🏫 Classes</h2>
-      <p class="muted" style="font-size:14px;margin-top:0">Chaque classe a son mot de passe. Les élèves choisissent leur classe, tapent leur prénom et ce mot de passe.</p>
+      <p class="muted" style="font-size:14px;margin-top:0">Crée tes classes, puis ajoute les élèves de chaque classe dans la carte « Élèves » : chaque élève reçoit son identifiant et son mot de passe.</p>
       <table><thead><tr><th>Classe</th><th>Élèves</th><th></th></tr></thead><tbody id="classes"></tbody></table>
       <h3 style="margin-top:16px">Ajouter une classe</h3>
       <form id="addcls" class="row">
-        <input id="cname" placeholder="Ex : 1re année collège" maxlength="60" style="flex:2;min-width:160px" required>
-        <input id="cpw" placeholder="Mot de passe de la classe" style="flex:1;min-width:140px" required minlength="4">
+        <input id="cname" placeholder="Ex : 1re année collège" maxlength="60" style="flex:1;min-width:160px" required>
         <button class="btn">➕ Ajouter</button>
       </form>
       <div class="hint" id="cmsg"></div>
@@ -53,6 +68,33 @@ td select{padding:5px 8px}
       </div>
       <div id="sigbox" hidden><label>Signature actuelle</label><img id="sigprev" alt="Signature actuelle"></div>
       <div class="hint" id="pmsg"></div>
+    </div>
+
+    <div class="card full" id="elevescard">
+      <h2>🎓 Élèves</h2>
+      <div class="row">
+        <div style="flex:1;min-width:200px"><label for="scls">Classe</label><select id="scls"></select></div>
+        <div style="flex:2;min-width:200px"><label for="sq">Rechercher</label><input id="sq" placeholder="Nom ou identifiant…"></div>
+      </div>
+      <details style="margin-top:12px" id="adddet">
+        <summary style="cursor:pointer;font-weight:600">➕ Ajouter des élèves à cette classe</summary>
+        <label for="names">Colle la liste des élèves, <b>un par ligne</b> (Prénom Nom). Tu peux la copier depuis Excel ou Massar.</label>
+        <textarea id="names" placeholder="Sara Benali&#10;Yassine El Amrani&#10;Nora Idrissi"></textarea>
+        <button class="btn" id="createst" style="margin-top:8px">Créer les comptes</button>
+      </details>
+      <div class="hint" id="smsg"></div>
+      <div class="newbox" id="newbox" hidden>
+        <b>⚠️ Note ou imprime ces mots de passe maintenant</b> : pour la sécurité, ils ne seront plus jamais affichés.
+        Si un élève l'oublie, clique sur « 🔑 Nouveau mot de passe ».
+        <div class="row" style="margin:8px 0">
+          <button class="btn" id="printf">🖨️ Imprimer les fiches</button>
+          <button class="btn sec" id="csvf">⬇️ Télécharger (Excel / CSV)</button>
+          <button class="btn sec" id="closenew">Fermer</button>
+        </div>
+        <table><thead><tr><th>Élève</th><th>Identifiant</th><th>Mot de passe</th></tr></thead><tbody id="newlist"></tbody></table>
+      </div>
+      <table style="margin-top:12px"><thead><tr><th>Élève</th><th>Identifiant</th><th>Dernière connexion</th><th></th></tr></thead><tbody id="stlist"></tbody></table>
+      <div class="small" id="stcount" style="margin-top:6px"></div>
     </div>
 
     <div class="card full">
@@ -76,6 +118,7 @@ td select{padding:5px 8px}
   </div>
 </div>
 
+<div id="fiches"></div>
 <script src="/common.js"></script>
 <script>
 const { $, api } = MEHDI;
@@ -94,30 +137,27 @@ async function loadClasses() {
     tr.insertCell().textContent = c.eleves;
     const td = tr.insertCell(); td.className = "row"; td.style.justifyContent = "flex-end";
     td.append(
-      btn("🔑 Mot de passe", "sec", async () => {
-        const pw = prompt("Nouveau mot de passe pour « " + c.name + " » (4 caractères minimum) :");
-        if (!pw) return;
-        try { await api("/api/classes", { method: "PUT", body: { id: c.id, password: pw } }); msg("cmsg", "Mot de passe de « " + c.name + " » changé.", "ok"); }
-        catch (e) { msg("cmsg", e.message, "err"); }
-      }),
+      btn("🎓 Élèves", "sec", () => { $("scls").value = c.id; loadStudents(); $("elevescard").scrollIntoView({ behavior: "smooth" }); }),
       btn("✏️", "sec", async () => {
         const n = prompt("Nouveau nom de la classe :", c.name);
         if (!n) return;
         try { await api("/api/classes", { method: "PUT", body: { id: c.id, name: n } }); loadAll(); } catch (e) { msg("cmsg", e.message, "err"); }
       }),
       btn("🗑️", "danger", async () => {
-        if (!confirm("Supprimer la classe « " + c.name + " » ? Les élèves ne pourront plus se connecter. Leurs conversations restent dans l’historique.")) return;
+        if (!confirm("Supprimer la classe « " + c.name + " » et les comptes de ses " + c.eleves + " élève(s) ? Leurs conversations restent dans l’historique.")) return;
         await api("/api/classes?id=" + encodeURIComponent(c.id), { method: "DELETE" }); loadAll();
       })
     );
   }
+  fillClassSelect();
 }
 $("addcls").onsubmit = async e => {
   e.preventDefault();
   try {
-    await api("/api/classes", { method: "POST", body: { name: $("cname").value, password: $("cpw").value } });
-    msg("cmsg", "Classe « " + $("cname").value.trim() + " » ajoutée. Donne son mot de passe aux élèves.", "ok");
-    $("cname").value = ""; $("cpw").value = "";
+    const d = await api("/api/classes", { method: "POST", body: { name: $("cname").value } });
+    msg("cmsg", "Classe « " + d.name + " » ajoutée. Ajoute maintenant ses élèves dans la carte « Élèves ».", "ok");
+    $("cname").value = "";
+    lastNewClass = d.id;
     loadAll();
   } catch (err) { msg("cmsg", err.message, "err"); }
 };
@@ -195,7 +235,106 @@ $("pwform").onsubmit = async e => {
   catch (err) { msg("pwmsg", err.message, "err"); }
 };
 
-async function loadAll() { await loadClasses(); await loadLessons(); }
+/* ---------- Élèves ---------- */
+let lastNewClass = null, allStudents = [], lastCreated = [];
+function fillClassSelect() {
+  const s = $("scls"), keep = lastNewClass || s.value;
+  s.innerHTML = "";
+  if (!classes.length) { const o = document.createElement("option"); o.value = ""; o.textContent = "Crée d’abord une classe"; s.appendChild(o); }
+  for (const c of classes) { const o = document.createElement("option"); o.value = c.id; o.textContent = c.name + " (" + c.eleves + ")"; s.appendChild(o); }
+  if (classes.some(c => c.id === keep)) s.value = keep;
+  if (lastNewClass) { $("adddet").open = true; lastNewClass = null; }
+}
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString("fr-FR") + " " + new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "jamais";
+async function loadStudents() {
+  const cid = $("scls").value;
+  allStudents = cid ? (await api("/api/students?classId=" + encodeURIComponent(cid))).students : [];
+  renderStudents();
+}
+function renderStudents() {
+  const q = $("sq").value.trim().toLowerCase();
+  const list = allStudents.filter(e => !q || e.name.toLowerCase().includes(q) || e.login.includes(q));
+  const tb = $("stlist"); tb.innerHTML = "";
+  if (!list.length) { const tr = tb.insertRow(); const td = tr.insertCell(); td.colSpan = 4; td.className = "muted"; td.textContent = allStudents.length ? "Aucun élève ne correspond." : "Aucun élève dans cette classe. Ouvre « ➕ Ajouter des élèves »."; }
+  for (const e of list) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = e.name;
+    const l = tr.insertCell(); l.className = "pw"; l.textContent = e.login;
+    tr.insertCell().textContent = fmtDate(e.lastLogin);
+    const td = tr.insertCell(); td.className = "row"; td.style.justifyContent = "flex-end";
+    td.append(
+      btn("🔑 Nouveau mot de passe", "sec", async () => {
+        if (!confirm("Créer un nouveau mot de passe pour " + e.name + " ? L’ancien ne marchera plus.")) return;
+        try { const d = await api("/api/students/reset", { method: "POST", body: { id: e.id } }); showNew([d], "Nouveau mot de passe pour " + e.name + "."); }
+        catch (err) { msg("smsg", err.message, "err"); }
+      }),
+      btn("🗑️", "danger", async () => {
+        if (!confirm("Supprimer le compte de " + e.name + " ? Ses conversations restent dans l’historique.")) return;
+        await api("/api/students?id=" + encodeURIComponent(e.id), { method: "DELETE" });
+        await loadClasses(); await loadStudents();
+      })
+    );
+  }
+  $("stcount").textContent = allStudents.length + " élève" + (allStudents.length > 1 ? "s" : "") + " dans cette classe.";
+}
+/* Affiche les mots de passe qui viennent d'être créés (une seule fois) */
+function showNew(list, text) {
+  lastCreated = list;
+  const tb = $("newlist"); tb.innerHTML = "";
+  for (const e of list) {
+    const tr = tb.insertRow();
+    tr.insertCell().textContent = e.name;
+    const l = tr.insertCell(); l.className = "pw"; l.textContent = e.login;
+    const p = tr.insertCell(); p.className = "pw"; p.textContent = e.password;
+  }
+  $("newbox").hidden = false;
+  msg("smsg", text, "ok");
+  $("newbox").scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+$("scls").onchange = loadStudents;
+$("sq").oninput = renderStudents;
+$("createst").onclick = async () => {
+  const names = $("names").value.split("\n").map(n => n.trim()).filter(Boolean);
+  if (!names.length) return msg("smsg", "Colle au moins un nom (un par ligne).", "err");
+  $("createst").disabled = true; msg("smsg", "Création de " + names.length + " compte(s)…");
+  try {
+    const d = await api("/api/students", { method: "POST", body: { classId: $("scls").value, names } });
+    $("names").value = ""; $("adddet").open = false;
+    showNew(d.created, d.created.length + " compte(s) créé(s).");
+    await loadClasses(); await loadStudents();
+  } catch (e) { msg("smsg", e.message, "err"); }
+  $("createst").disabled = false;
+};
+$("closenew").onclick = () => {
+  if (!confirm("As-tu bien imprimé ou téléchargé les mots de passe ? Ils ne seront plus affichés.")) return;
+  $("newbox").hidden = true; lastCreated = []; $("newlist").innerHTML = ""; $("fiches").innerHTML = "";
+};
+/* Fiches à découper : une par élève */
+$("printf").onclick = () => {
+  const f = $("fiches"); f.innerHTML = "";
+  const site = location.origin;
+  for (const e of lastCreated) {
+    const d = document.createElement("div"); d.className = "fiche";
+    const img = new Image(); img.src = "/logo.png"; img.alt = "";
+    const t = document.createElement("div"); t.innerHTML = "<b></b><br><span></span><br><br>Site : <span></span><br>Identifiant : <span class='code'></span><br>Mot de passe : <span class='code'></span><br><br><span style='font-size:11px'>Garde ce mot de passe secret, ne le donne à personne.</span>";
+    const sp = t.querySelectorAll("b, span");
+    sp[0].textContent = e.name; sp[1].textContent = e.className || ""; sp[2].textContent = site; sp[3].textContent = e.login; sp[4].textContent = e.password;
+    d.append(img, t); f.appendChild(d);
+  }
+  setTimeout(() => print(), 300);
+};
+/* Fichier CSV (s'ouvre dans Excel) */
+$("csvf").onclick = () => {
+  const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const rows = [["Élève", "Classe", "Identifiant", "Mot de passe", "Site"], ...lastCreated.map(e => [e.name, e.className || "", e.login, e.password, location.origin])];
+  const blob = new Blob(["\ufeff" + rows.map(r => r.map(esc).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = "comptes-" + (($("scls").selectedOptions[0]?.textContent || "classe").replace(/\s*\(\d+\)$/, "").replace(/[^\w-]+/g, "-")) + ".csv";
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+window.addEventListener("beforeunload", e => { if (lastCreated.length && !$("newbox").hidden) { e.preventDefault(); e.returnValue = ""; } });
+
+async function loadAll() { await loadClasses(); await loadStudents(); await loadLessons(); }
 (async () => {
   await MEHDI.init("prof", { profOnly: true });
   const p = await api("/api/profile");

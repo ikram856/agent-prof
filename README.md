@@ -6,7 +6,8 @@ A classroom assistant that helps middle-school students during a lesson. The tea
 
 ## Features
 
-- **Accounts** — one teacher account + one account per class; students log in with their class password and first name
+- **Accounts** — one teacher account + one personal account per student (identifier + generated password, printable login cards, CSV export, password reset)
+- **Session summaries** — one button: the student gets "what I learned", the teacher gets a teaching report; the teacher can also summarize a whole class session (all questions of the day)
 - **Questions / Debate / Quiz** — three modes; the debate starts right away with a question taken from the course
 - **History** — every conversation is saved on the server; the teacher sees all students' conversations, each student sees their own
 - **Course summaries** — AI-drafted summary + mind map per lesson, edited by the teacher, exported as a signed PDF
@@ -45,7 +46,7 @@ cp .env.example .env      # then put your Gemini key in .env (never commit it)
 npm start
 ```
 
-Open http://localhost:3000. On first launch you create the teacher password, then add classes in **⚙️ Espace prof**.
+Open http://localhost:3000. On first launch you create the teacher password, then add classes and their students in **⚙️ Espace prof**.
 Students on the same Wi-Fi use the computer's local address, e.g. `http://192.168.1.25:3000`.
 
 ## Tests

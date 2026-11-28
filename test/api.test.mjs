@@ -102,34 +102,73 @@ test("premier lancement : création du compte professeur une seule fois", async 
 });
 
 test("le prof crée deux classes et range la leçon dans la première", async () => {
-  assert.equal((await prof.post("/api/classes", { name: "1re année", password: "1ac-test" })).status, 200);
-  assert.equal((await prof.post("/api/classes", { name: "2e année", password: "2ac-test" })).status, 200);
-  assert.equal((await prof.post("/api/classes", { name: "1re année", password: "xxxx" })).status, 400, "doublon refusé");
+  assert.equal((await prof.post("/api/classes", { name: "1re année" })).status, 200);
+  assert.equal((await prof.post("/api/classes", { name: "2e année" })).status, 200);
+  assert.equal((await prof.post("/api/classes", { name: "1re année" })).status, 400, "doublon refusé");
   assert.equal((await prof.put("/api/lessons", { id: LESSON, classId: "1re-annee" })).status, 200);
 });
 
+/* Comptes élèves créés par le prof : nom -> { login, password } */
+const comptes = {};
+const connecter = (c, nom, pw = comptes[nom].password) => c.post("/api/login", { role: "eleve", login: comptes[nom].login, password: pw });
+
+test("le prof crée un compte par élève, chacun avec son mot de passe", async () => {
+  const r1 = await prof.post("/api/students", { classId: "1re-annee", names: "Sara Benali\nNora Idrissi\n\nNora Idrissi\n<img src=x onerror=alert(1)>" });
+  assert.equal(r1.status, 200);
+  const r2 = await prof.post("/api/students", { classId: "2e-annee", names: ["Yassine El Amrani", "Adam Alaoui"] });
+  for (const e of [...r1.data.created, ...r2.data.created]) comptes[e.name in comptes ? e.name + " (2)" : e.name] = e;
+  assert.equal(r1.data.created.length, 4, "la ligne vide est ignorée");
+  assert.equal(comptes["Sara Benali"].login, "sara.benali");
+  assert.notEqual(comptes["Nora Idrissi"].login, comptes["Nora Idrissi (2)"].login, "deux homonymes ont deux identifiants");
+  const pws = Object.values(comptes).map(e => e.password);
+  assert.equal(new Set(pws).size, pws.length, "mots de passe tous différents");
+  assert.ok(pws.every(p => p.length >= 10));
+  // la liste ne montre jamais les mots de passe
+  const list = (await prof.get("/api/students?classId=1re-annee")).data.students;
+  assert.equal(list.length, 4);
+  assert.ok(list.every(e => !("password" in e) && !("hash" in e)));
+  assert.doesNotMatch(JSON.stringify(list), new RegExp(comptes["Sara Benali"].password));
+  assert.equal((await prof.post("/api/students", { classId: "inexistante", names: ["X Y"] })).status, 400);
+});
+
 test("connexion élève : mauvais mot de passe refusé, bon accepté", async () => {
-  assert.equal((await sara.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Sara", password: "faux" })).status, 401);
-  assert.equal((await sara.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "", password: "1ac-test" })).status, 400);
-  assert.equal((await sara.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Sara", password: "1ac-test" })).status, 200);
-  assert.equal((await yassine.post("/api/login", { role: "eleve", classId: "2e-annee", prenom: "Yassine", password: "2ac-test" })).status, 200);
+  assert.equal((await connecter(sara, "Sara Benali", "faux")).status, 401);
+  assert.equal((await connecter(sara, "Sara Benali", comptes["Nora Idrissi"].password)).status, 401, "le mot de passe d'un camarade ne marche pas");
+  assert.equal((await sara.post("/api/login", { role: "eleve", login: "", password: "x" })).status, 400);
+  assert.equal((await connecter(sara, "Sara Benali")).status, 200);
+  assert.equal((await yassine.post("/api/login", { role: "eleve", login: " " + comptes["Yassine El Amrani"].login.toUpperCase() + " ", password: comptes["Yassine El Amrani"].password })).status, 200, "identifiant sans souci de majuscules");
   const me = await sara.get("/api/me");
   assert.equal(me.data.role, "eleve");
-  assert.equal(me.data.student, "Sara");
+  assert.equal(me.data.student, "Sara Benali");
+  assert.equal(me.data.classId, "1re-annee");
 });
 
 test("trop d'essais : seul le compte visé est bloqué, pas toute la classe", async () => {
   const pirate = client();
-  for (let i = 0; i < 10; i++) await pirate.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Pirate", password: "x" + i });
-  assert.equal((await pirate.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Pirate", password: "1ac-test" })).status, 429);
-  const autre = client();
-  assert.equal((await autre.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Nora", password: "1ac-test" })).status, 200);
+  for (let i = 0; i < 10; i++) await connecter(pirate, "Nora Idrissi (2)", "x" + i);
+  assert.equal((await connecter(pirate, "Nora Idrissi (2)")).status, 429);
+  assert.equal((await connecter(client(), "Nora Idrissi")).status, 200);
+});
+
+test("nouveau mot de passe : l'ancien ne marche plus et la session est fermée", async () => {
+  const x = client();
+  assert.equal((await connecter(x, "Adam Alaoui")).status, 200);
+  const r = await prof.post("/api/students/reset", { id: comptes["Adam Alaoui"].id });
+  assert.equal(r.status, 200);
+  assert.notEqual(r.data.password, comptes["Adam Alaoui"].password);
+  assert.equal((await x.get("/api/me")).status, 401, "l'ancienne session est fermée");
+  assert.equal((await connecter(client(), "Adam Alaoui")).status, 401, "ancien mot de passe refusé");
+  comptes["Adam Alaoui"].password = r.data.password;
+  assert.equal((await connecter(client(), "Adam Alaoui")).status, 200);
 });
 
 /* ---------- Droits ---------- */
 test("un élève ne peut pas utiliser les fonctions du professeur", async () => {
   assert.equal((await sara.get("/api/classes")).status, 403);
-  assert.equal((await sara.post("/api/classes", { name: "Pirate", password: "xxxx" })).status, 403);
+  assert.equal((await sara.post("/api/classes", { name: "Pirate" })).status, 403);
+  assert.equal((await sara.get("/api/students?classId=1re-annee")).status, 403);
+  assert.equal((await sara.post("/api/students", { classId: "1re-annee", names: ["Faux Élève"] })).status, 403);
+  assert.equal((await sara.post("/api/students/reset", { id: comptes["Nora Idrissi"].id })).status, 403);
   assert.equal((await sara.put("/api/resume", { lessonId: LESSON, texte: "piraté" })).status, 403);
   assert.equal((await sara.put("/api/profile", { nom: "Pirate" })).status, 403);
   assert.equal((await sara.del("/api/history?id=x")).status, 403);
@@ -172,16 +211,55 @@ test("un élève ne peut pas lire la conversation d'un autre élève", async () 
 test("le professeur voit l'historique de tous les élèves", async () => {
   await yassine.post("/api/chat", { mode: "cours", text: "C'est quoi un foyer ?" });
   const list = (await prof.get("/api/history")).data.conversations;
-  assert.deepEqual(new Set(list.map(c => c.student)), new Set(["Sara", "Yassine"]));
+  assert.deepEqual(new Set(list.map(c => c.student)), new Set(["Sara Benali", "Yassine El Amrani"]));
   const only2 = (await prof.get("/api/history?classId=2e-annee")).data.conversations;
-  assert.ok(only2.every(c => c.student === "Yassine"));
+  assert.ok(only2.every(c => c.student === "Yassine El Amrani"));
+});
+
+/* ---------- Résumés de séance ---------- */
+test("l'élève fait le résumé de sa séance (gardé, pas refait pour rien)", async () => {
+  const r = await sara.post("/api/conv/summary", { mode: "debat" });
+  assert.equal(r.status, 200);
+  assert.match(r.data.summary.texte, /Résumé pour élève : 1 question/, "écrit pour l'élève, à partir de ses messages (sans le message caché)");
+  const avant = mock.stats.plainRequests;
+  const r2 = await sara.post("/api/conv/summary", { mode: "debat" });
+  assert.equal(r2.data.summary.updated, r.data.summary.updated, "même résumé");
+  assert.equal(mock.stats.plainRequests, avant, "aucun nouvel appel à l'IA");
+  const { conv } = (await sara.get("/api/conv?mode=debat")).data;
+  assert.equal(conv.summary.texte, r.data.summary.texte, "le résumé revient avec la conversation");
+  assert.equal((await sara.post("/api/conv/summary", { mode: "quiz" })).status, 404, "pas de conversation, pas de résumé");
+});
+
+test("le prof a son propre bilan ; un autre élève ne peut pas résumer la conversation", async () => {
+  const { conv } = (await sara.get("/api/conv?mode=debat")).data;
+  assert.equal((await yassine.post("/api/conv/summary", { id: conv.id })).status, 404);
+  const r = await prof.post("/api/conv/summary", { id: conv.id });
+  assert.equal(r.status, 200);
+  assert.match(r.data.summary.texte, /Résumé pour prof/);
+  assert.match((await prof.get("/api/history/one?id=" + conv.id)).data.conv.summary.texte, /pour prof/);
+  assert.match((await sara.get("/api/history/one?id=" + conv.id)).data.conv.summary.texte, /pour élève/, "l'élève garde sa version");
+});
+
+test("résumé de la séance d'une classe : toutes les questions du jour, pour le prof seulement", async () => {
+  const date = new Date().toISOString().slice(0, 10);
+  assert.equal((await sara.get("/api/seance?classId=1re-annee&date=" + date)).status, 403);
+  assert.equal((await sara.post("/api/seance/summary", { classId: "1re-annee", date })).status, 403);
+  assert.equal((await prof.get("/api/seance?classId=1re-annee&date=../../x")).status, 400);
+  const info = (await prof.get("/api/seance?classId=1re-annee&date=" + date)).data;
+  assert.equal(info.eleves, 1);
+  assert.equal(info.summary, null);
+  const r = await prof.post("/api/seance/summary", { classId: "1re-annee", date });
+  assert.equal(r.status, 200);
+  assert.match(r.data.summary.texte, new RegExp("Résumé pour classe : " + info.questions + " question"));
+  assert.equal((await prof.get("/api/seance?classId=1re-annee&date=" + date)).data.summary.texte, r.data.summary.texte, "le résumé est gardé");
+  assert.equal((await prof.post("/api/seance/summary", { classId: "1re-annee", date: "2001-01-01" })).status, 400, "jour sans questions");
 });
 
 /* ---------- Cache de contexte ---------- */
 test("cache : un seul cache pour toutes les questions sur la même leçon", async () => {
   const avant = { ...mock.stats };
   const nora = client();
-  await nora.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Nora", password: "1ac-test" });
+  await connecter(nora, "Nora Idrissi");
   for (const [qui, texte] of [[sara, "C'est quoi le foyer ?"], [nora, "Et l'épicentre ?"], [sara, "Donne un exemple"]]) {
     const parts = ndjson((await qui.post("/api/chat", { mode: "cours", text: texte, lessonId: LESSON })).data);
     assert.ok(parts.some(p => p.done), texte);
@@ -262,18 +340,34 @@ test("une adresse mal formée ne fait pas planter le serveur", async () => {
   assert.equal((await anonyme.get("/login.html")).status, 200, "le serveur répond toujours");
 });
 
-test("le prénom est enregistré comme du texte, sans être interprété", async () => {
+test("le nom de l'élève est enregistré comme du texte, sans être interprété", async () => {
   const x = client();
   const nom = "<img src=x onerror=alert(1)>";
-  assert.equal((await x.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: nom, password: "1ac-test" })).status, 200);
+  assert.equal((await connecter(x, nom)).status, 200);
   assert.equal((await x.get("/api/me")).data.student, nom);
   assert.match((await x.get("/api/me")).headers.get("content-type"), /application\/json/);
 });
 
 test("déconnexion : la session ne marche plus", async () => {
   const x = client();
-  await x.post("/api/login", { role: "eleve", classId: "2e-annee", prenom: "Adam", password: "2ac-test" });
+  await connecter(x, "Adam Alaoui");
   assert.equal((await x.get("/api/me")).status, 200);
   await x.post("/api/logout");
   assert.equal((await x.get("/api/me")).status, 401);
+});
+
+test("compte supprimé ou classe supprimée : l'élève est déconnecté", async () => {
+  const x = client();
+  await connecter(x, "Nora Idrissi");
+  assert.equal((await x.get("/api/me")).status, 200);
+  assert.equal((await prof.del("/api/students?id=" + comptes["Nora Idrissi"].id)).status, 200);
+  assert.equal((await x.get("/api/me")).status, 401);
+  assert.equal((await connecter(client(), "Nora Idrissi")).status, 401);
+  // suppression de la 2e classe : ses élèves ne peuvent plus entrer
+  await connecter(x, "Adam Alaoui");
+  const d = await prof.del("/api/classes?id=2e-annee");
+  assert.equal(d.status, 200);
+  assert.equal(d.data.comptesSupprimes, 2);
+  assert.equal((await x.get("/api/me")).status, 401);
+  assert.equal((await yassine.get("/api/me")).status, 401);
 });
