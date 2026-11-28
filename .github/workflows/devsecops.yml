@@ -78,7 +78,7 @@ jobs:
             --config p/javascript --config p/nodejsscan --config p/owasp-top-ten --config p/secrets \
             --exclude node_modules --exclude test --exclude "*.ancien.*" --metrics=off --text
           exit ${code:-0}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: rapport-semgrep
@@ -111,7 +111,7 @@ jobs:
           mkdir -p zap && cp .zap/rules.tsv zap/ && chmod -R 777 zap
           docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
             zap-baseline.py -t http://localhost:3000/ -c rules.tsv -r rapport-zap.html -J rapport-zap.json -I
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: rapport-zap
