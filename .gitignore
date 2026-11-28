@@ -1,8 +1,10 @@
 .env
 node_modules/
-cours/
-data/
-conversations/
+
+# donnees privees de l etablissement (seulement a la racine du projet)
+/cours/
+/data/
+/conversations/
 
 # rapports du pipeline
 zap/
