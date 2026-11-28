@@ -55,7 +55,8 @@ before(async () => {
   srv = spawn(process.execPath, ["server.mjs"], {
     cwd: ROOT,
     env: { ...process.env, PORT: String(port), GEMINI_API_KEY: "test", GEMINI_BASE_URL: mock.url, GEMINI_MODEL: "faux-flash-lite", GEMINI_FALLBACKS: "faux-flash",
-      DATA_DIR: path.join(tmp, "data"), COURS_DIR: path.join(tmp, "cours"), PROF_PASSWORD: "" },
+      DATA_DIR: path.join(tmp, "data"), COURS_DIR: path.join(tmp, "cours"), PROF_PASSWORD: "",
+      GEMINI_CACHE_MIN_CHARS: "200" },   // le cours de test est court : on force le cache pour le tester
     stdio: ["ignore", "pipe", "pipe"]
   });
   let out = "";
@@ -174,6 +175,34 @@ test("le professeur voit l'historique de tous les élèves", async () => {
   assert.deepEqual(new Set(list.map(c => c.student)), new Set(["Sara", "Yassine"]));
   const only2 = (await prof.get("/api/history?classId=2e-annee")).data.conversations;
   assert.ok(only2.every(c => c.student === "Yassine"));
+});
+
+/* ---------- Cache de contexte ---------- */
+test("cache : un seul cache pour toutes les questions sur la même leçon", async () => {
+  const avant = { ...mock.stats };
+  const nora = client();
+  await nora.post("/api/login", { role: "eleve", classId: "1re-annee", prenom: "Nora", password: "1ac-test" });
+  for (const [qui, texte] of [[sara, "C'est quoi le foyer ?"], [nora, "Et l'épicentre ?"], [sara, "Donne un exemple"]]) {
+    const parts = ndjson((await qui.post("/api/chat", { mode: "cours", text: texte, lessonId: LESSON })).data);
+    assert.ok(parts.some(p => p.done), texte);
+  }
+  assert.equal(mock.stats.cachesCreated - avant.cachesCreated, 1, "un seul cache pour les 3 questions");
+  assert.equal(mock.stats.cachedRequests - avant.cachedRequests, 3, "les 3 questions utilisent le cache");
+});
+
+test("cache expiré chez Google : la réponse arrive quand même", async () => {
+  mock.expireAll();
+  const avant = mock.stats.plainRequests;
+  const parts = ndjson((await sara.post("/api/chat", { mode: "cours", text: "Encore une question", lessonId: LESSON })).data);
+  assert.ok(parts.some(p => p.done), "réponse complète");
+  assert.match(parts.map(p => p.d || "").join(""), /Encore une question/);
+  assert.equal(mock.stats.plainRequests - avant, 1, "nouvel essai sans cache");
+});
+
+test("les résumés de cours n'utilisent pas le cache (demande ponctuelle)", async () => {
+  const avant = mock.stats.cachesCreated;
+  assert.equal((await prof.post("/api/resume/generate", { lessonId: LESSON })).status, 200);
+  assert.equal(mock.stats.cachesCreated, avant);
 });
 
 /* ---------- Résumés et signature ---------- */
