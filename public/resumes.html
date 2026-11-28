@@ -18,15 +18,20 @@
 .tools{margin-bottom:12px}
 /* La fiche : même rendu à l'écran et dans le PDF */
 .sheet{background:#fff;color:#11233d;border-radius:12px;padding:28px 34px;border:1px solid var(--bd);max-width:900px}
-.sheet-head{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1d6cb3;padding-bottom:12px;margin-bottom:16px}
-.sheet-head img{height:84px;width:auto}
-.sheet-head h1{margin:0;font-size:26px;color:#1d6cb3}
+.sheet-head{display:flex;align-items:center;gap:16px;border-bottom:3px solid var(--c,#1d6cb3);padding-bottom:12px;margin-bottom:16px}
+.sheet-head img{height:84px;width:auto;max-width:160px;object-fit:contain}
+.sheet-head .grow{flex:1}
+.sheet-head .mehdi{height:48px;opacity:.9}
+.sheet-head .etab{font-size:13px;font-weight:600;color:#11233d;text-transform:uppercase;letter-spacing:.03em}
+.sheet-head h1{margin:0;font-size:26px;color:var(--c,#1d6cb3)}
 .sheet-head .meta{font-size:14px;color:#5d6f87}
-.sheet h2{color:#1d6cb3;font-size:18px;margin:18px 0 8px}
+.sheet h2{color:var(--c,#1d6cb3);font-size:18px;margin:18px 0 8px}
 .sheet .texte{white-space:pre-wrap;line-height:1.6}
 .sheet .sig{display:flex;justify-content:flex-end;margin-top:26px}
-.sheet .sig div{text-align:center;min-width:230px}
-.sheet .sig img{display:block;max-height:90px;max-width:230px;margin:4px auto}
+.sheet .sig > div{text-align:center;min-width:230px}
+.sheet .sig .zone{position:relative;height:100px;display:flex;align-items:center;justify-content:center}
+.sheet .sig .zone img{max-height:90px;max-width:230px}
+.sheet .sig .zone img.cachet{position:absolute;right:-10px;top:-6px;max-height:110px;max-width:110px;opacity:.85}
 .sheet .sig .line{border-top:1px solid #11233d;padding-top:4px;font-weight:600}
 .sheet .foot{margin-top:18px;font-size:11px;color:#5d6f87;text-align:center}
 .carte-box{border:1px solid #d9e4f2;border-radius:12px;padding:8px;background:#fff}
@@ -142,13 +147,20 @@ function hint(t, cls) { const m = $("msg"); if (m) { m.textContent = t; m.classN
 function drawSheet() {
   const s = $("sheet"); if (!s) return;
   s.innerHTML = "";
+  if (/^#[0-9a-f]{6}$/i.test(profile.couleur || "")) s.style.setProperty("--c", profile.couleur);
   const head = document.createElement("div"); head.className = "sheet-head";
-  const logo = new Image(); logo.src = "/logo.png"; logo.alt = "MEHDI 2.0";
-  const hd = document.createElement("div");
+  const logo = new Image(); logo.src = profile.logoEcole || "/logo.png"; logo.alt = profile.logoEcole ? "Logo de l’établissement" : "MEHDI 2.0";
+  const hd = document.createElement("div"); hd.className = "grow";
+  if (profile.etablissement || profile.annee) {
+    const et = document.createElement("div"); et.className = "etab";
+    et.textContent = [profile.etablissement, profile.annee ? "Année " + profile.annee : ""].filter(Boolean).join(" · ");
+    hd.appendChild(et);
+  }
   const h1 = document.createElement("h1"); h1.textContent = data.lessonName;
   const meta = document.createElement("div"); meta.className = "meta";
   meta.textContent = [profile.matiere, data.className, profile.nom ? "Prof. " + profile.nom : "", data.updated ? "Mis à jour le " + new Date(data.updated).toLocaleDateString("fr-FR") : ""].filter(Boolean).join(" · ");
   hd.append(h1, meta); head.append(logo, hd);
+  if (profile.logoEcole) { const m = new Image(); m.src = "/logo.png"; m.alt = "MEHDI 2.0"; m.className = "mehdi"; head.appendChild(m); }
   s.appendChild(head);
 
   if (data.texte) {
@@ -168,11 +180,13 @@ function drawSheet() {
   const sd = document.createElement("div");
   const lab = document.createElement("div"); lab.className = "muted"; lab.style.fontSize = "13px"; lab.textContent = "Signature du professeur";
   sd.appendChild(lab);
-  if (profile.signature) { const im = new Image(); im.src = profile.signature; im.alt = "Signature"; sd.appendChild(im); }
-  else { const sp = document.createElement("div"); sp.style.height = "60px"; sd.appendChild(sp); }
+  const zone = document.createElement("div"); zone.className = "zone";
+  if (profile.signature) { const im = new Image(); im.src = profile.signature; im.alt = "Signature"; zone.appendChild(im); }
+  if (profile.cachet) { const im = new Image(); im.src = profile.cachet; im.alt = "Cachet"; im.className = "cachet"; zone.appendChild(im); }
+  sd.appendChild(zone);
   const line = document.createElement("div"); line.className = "line"; line.textContent = profile.nom || "Le professeur";
   sd.appendChild(line); sig.appendChild(sd); s.appendChild(sig);
-  const foot = document.createElement("div"); foot.className = "foot"; foot.textContent = "Fiche de révision · MEHDI 2.0";
+  const foot = document.createElement("div"); foot.className = "foot"; foot.textContent = (profile.pied ? profile.pied + " · " : "") + "Fiche de révision · MEHDI 2.0";
   s.appendChild(foot);
   if (me.role === "prof" && !profile.signature) hint("Astuce : ajoute ta signature dans ⚙️ Espace prof pour qu’elle apparaisse sur le PDF.", "");
 }

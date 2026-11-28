@@ -41,6 +41,7 @@ aside{display:flex;flex-direction:column;gap:14px}
 #sum{white-space:pre-wrap;font-size:14px;margin-top:10px;background:var(--bg);border-radius:10px;padding:10px;max-height:55vh;overflow-y:auto}
 #sum:empty{display:none}
 #sumlink{display:block;margin-top:8px;font-size:14px}
+#sumlink[hidden]{display:none}
 /* débat : sondage + chrono (prof) */
 #poll{display:none}
 body.debat.isprof #poll{display:block}
@@ -73,6 +74,9 @@ body.proj .vb{font-size:22px;padding:16px}
 body.proj .res b{font-size:44px}
 @media (max-width:860px){body.proj main{grid-template-columns:1fr}}
 /* modale liens web */
+.addto{display:flex;gap:6px;align-items:flex-start;font-size:13px;color:var(--mut);margin-top:8px;cursor:pointer}
+.addto input{width:auto;margin-top:2px}
+.addto.off{opacity:.5;cursor:default}
 #urlModal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:999;align-items:center;justify-content:center}
 #urlModal.open{display:flex}
 #urlBox{width:min(500px,94vw);display:flex;flex-direction:column;gap:6px}
@@ -131,11 +135,14 @@ body.proj .res b{font-size:44px}
       <label for="newcls">Classe des nouvelles leçons</label>
       <select id="newcls"><option value="">Toutes les classes</option></select>
       <div class="btns" style="margin-top:8px">
-        <button id="upb" type="button">📎 PDF / PPTX</button>
+        <button id="upb" type="button" title="PDF, PowerPoint, texte ou photos (plusieurs à la fois)">📎 Fichiers</button>
+        <button id="camb" type="button" title="Prendre une page du manuel en photo">📷 Photo</button>
         <button id="urlb" type="button">🔗 Liens web</button>
         <button id="delb" type="button" title="Supprimer la leçon">🗑️</button>
       </div>
-      <input type="file" id="up" accept=".pdf,.pptx,.txt,.md" hidden>
+      <label class="addto"><input type="checkbox" id="addto"> Ajouter à la leçon choisie (au lieu d’en créer une nouvelle)</label>
+      <input type="file" id="up" accept=".pdf,.pptx,.txt,.md,image/jpeg,image/png,image/webp,image/heic,.heic,.heif" multiple hidden>
+      <input type="file" id="cam" accept="image/*" capture="environment" multiple hidden>
       <label for="extra">Notes du jour pour cette leçon (l'IA en tient compte)</label>
       <textarea id="extra" rows="3" placeholder="Ex : insister sur la prévention. Niveau : 1re année collège."></textarea>
     </div>
@@ -325,6 +332,7 @@ async function loadLessons(sel) {
   lessonChanged(false);
 }
 function lessonChanged(user = true) {
+  syncAddto();
   store.set("mehdi-lesson", lessonId());
   const l = lessons.find(x => x.id === lessonId());
   if (isProf) { $("extra").value = l?.notes || ""; $("extra").disabled = !l; $("delb").disabled = !l; }
@@ -344,19 +352,44 @@ $("extra").addEventListener("input", () => {
   }, 800);
 });
 
+/* Import de fichiers et de photos : plusieurs à la fois, tous dans la même leçon.
+   Les photos sont lues par l'IA (texte + description des schémas). */
+const isImg = f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+function syncAddto() {
+  const on = !!lessonId();
+  $("addto").disabled = !on; if (!on) $("addto").checked = false;
+  $("addto").parentElement.classList.toggle("off", !on);
+}
 $("upb").onclick = () => $("up").click();
-$("up").onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  $("lmsg").textContent = "Import en cours…";
-  try {
-    const d = await api("/api/lessons?name=" + encodeURIComponent(f.name) + "&filename=" + encodeURIComponent(f.name) + "&classId=" + encodeURIComponent($("newcls").value),
-      { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
-    await loadLessons(d.id);
-    $("lmsg").textContent = "Leçon ajoutée (" + d.chars + " caractères)." + (d.tronque ? " Texte coupé à 60 000 caractères." : "");
-    lessonChanged(true);
-  } catch (err) { $("lmsg").textContent = err instanceof TypeError ? "Le serveur ne répond pas." : err.message; }
-  e.target.value = "";
-};
+$("camb").onclick = () => $("cam").click();
+async function importFiles(files) {
+  if (!files.length) return;
+  if (files.length > 20) return ($("lmsg").textContent = "20 fichiers maximum à la fois.");
+  let target = $("addto").checked ? lessonId() : "";
+  let name = "";
+  if (!target) {
+    const def = files.length === 1 && !isImg(files[0]) ? files[0].name.replace(/\.[^.]+$/, "") : "Photos du cours";
+    name = prompt("Nom de la nouvelle leçon :", def);
+    if (name === null) return;
+    name = name.trim() || def;
+  }
+  const ok = [], ko = [];
+  let last = null;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    $("lmsg").textContent = "Import " + (i + 1) + "/" + files.length + " : " + f.name + (isImg(f) ? " (l’IA lit la photo…)" : "…");
+    const q = new URLSearchParams({ filename: f.name });
+    if (target) q.set("append", target); else { q.set("name", name); q.set("classId", $("newcls").value); }
+    try {
+      last = await api("/api/lessons?" + q, { method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: f });
+      target = last.id; ok.push(f.name);
+    } catch (err) { ko.push(f.name + " : " + (err instanceof TypeError ? "le serveur ne répond pas" : err.message)); }
+  }
+  if (target) { await loadLessons(target); lessonChanged(true); }
+  $("lmsg").textContent = (ok.length ? ok.length + " fichier(s) importé(s)" + (last ? " · leçon de " + last.chars + " caractères" : "") + "." + (last?.tronque ? " ⚠️ Leçon pleine : texte coupé à 60 000 caractères." : "") : "") +
+    (ko.length ? (ok.length ? " " : "") + "⚠️ Échec : " + ko.join(" ; ") : "");
+}
+for (const id of ["up", "cam"]) $(id).onchange = async e => { const files = [...e.target.files]; e.target.value = ""; await importFiles(files); };
 $("delb").onclick = async () => {
   const l = lessons.find(x => x.id === lessonId()); if (!l) return;
   if (!confirm("Supprimer la leçon « " + l.name + " » et son résumé ?")) return;
@@ -375,9 +408,10 @@ $("urlSubmit").onclick = async () => {
   if (urls.length > 5) return ($("urlMsg").textContent = "Maximum 5 liens à la fois.");
   $("urlSubmit").disabled = true; $("urlMsg").textContent = "Récupération en cours…";
   try {
-    const d = await api("/api/fetch-url", { method: "POST", body: { urls, name, classId: $("newcls").value } });
+    const append = $("addto").checked ? lessonId() : "";
+    const d = await api("/api/fetch-url", { method: "POST", body: { urls, name, classId: $("newcls").value, append } });
     await loadLessons(d.id);
-    $("lmsg").textContent = "Leçon ajoutée depuis " + urls.length + " lien(s) (" + d.chars + " caractères)." + (d.warnings?.length ? " ⚠️ " + d.warnings.length + " lien(s) ignoré(s)." : "");
+    $("lmsg").textContent = (append ? "Leçon complétée" : "Leçon ajoutée") + " depuis " + urls.length + " lien(s) (" + d.chars + " caractères)." + (d.warnings?.length ? " ⚠️ " + d.warnings.length + " lien(s) ignoré(s)." : "");
     closeUrl(); $("urlName").value = ""; $("urlList").value = "";
     lessonChanged(true);
   } catch (e) { $("urlMsg").textContent = e.message; }

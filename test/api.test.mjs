@@ -9,6 +9,7 @@ import os from "node:os";
 import path from "node:path";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
+import JSZip from "jszip";
 import { startMock } from "./mock-gemini.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -21,7 +22,7 @@ const freePort = () => new Promise(r => { const s = net.createServer().listen(0,
 function client() {
   let cookie = "";
   const call = async (method, url, body, headers = {}) => {
-    const isJSON = body !== undefined && typeof body !== "string";
+    const isJSON = body !== undefined && typeof body !== "string" && !Buffer.isBuffer(body);
     const r = await fetch(B + url, {
       method, redirect: "manual",
       headers: { ...(cookie ? { Cookie: cookie } : {}), ...(isJSON ? { "Content-Type": "application/json" } : {}), ...headers },
@@ -37,7 +38,8 @@ function client() {
     get: (u, h) => call("GET", u, undefined, h),
     post: (u, b, h) => call("POST", u, b, h),
     put: (u, b, h) => call("PUT", u, b, h),
-    del: (u, h) => call("DELETE", u, undefined, h)
+    del: (u, h) => call("DELETE", u, undefined, h),
+    cookie: () => cookie
   };
 }
 /* Lit la réponse en morceaux de /api/chat */
@@ -131,6 +133,21 @@ test("le prof crée un compte par élève, chacun avec son mot de passe", async 
   assert.equal((await prof.post("/api/students", { classId: "inexistante", names: ["X Y"] })).status, 400);
 });
 
+test("les comptes se téléchargent en vrai fichier Excel (.xlsx) lisible", async () => {
+  const r = await fetch(B + "/api/students/xlsx", { method: "POST", headers: { "Content-Type": "application/json", Origin: B, Cookie: prof.cookie() },
+    body: JSON.stringify({ title: "1re année", site: "https://mehdiprof.com", rows: [{ name: "Élève <test> & Cie", className: "1re année", login: "eleve.test", password: "abcd-efgh-12" }, { name: "=1+1", login: "x", password: "y" }] }) });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get("content-type"), /spreadsheetml/);
+  const zip = await JSZip.loadAsync(Buffer.from(await r.arrayBuffer()));
+  const sheet = await zip.file("xl/worksheets/sheet1.xml").async("string");
+  assert.match(sheet, /Élève &lt;test&gt; &amp; Cie/, "accents et caractères spéciaux corrects");
+  assert.match(sheet, /abcd-efgh-12/);
+  assert.match(sheet, /t="inlineStr"><is><t xml:space="preserve">=1\+1</, "une formule reste du texte");
+  assert.match(await zip.file("xl/workbook.xml").async("string"), /name="1re année"/);
+  const r2 = await fetch(B + "/api/students/xlsx", { method: "POST", headers: { "Content-Type": "application/json", Origin: B, Cookie: sara.cookie() }, body: "{}" });
+  assert.equal(r2.status, 401);
+});
+
 test("connexion élève : mauvais mot de passe refusé, bon accepté", async () => {
   assert.equal((await connecter(sara, "Sara Benali", "faux")).status, 401);
   assert.equal((await connecter(sara, "Sara Benali", comptes["Nora Idrissi"].password)).status, 401, "le mot de passe d'un camarade ne marche pas");
@@ -162,6 +179,39 @@ test("nouveau mot de passe : l'ancien ne marche plus et la session est fermée",
   assert.equal((await connecter(client(), "Adam Alaoui")).status, 200);
 });
 
+/* ---------- Photos et leçons en plusieurs morceaux ---------- */
+const photo = (debut, texte) => Buffer.concat([Buffer.from(debut, "hex"), Buffer.from("....TEXTE:" + texte, "latin1")]);
+const lessonText = id => JSON.parse(fs.readFileSync(path.join(tmp, "cours", id + ".json"), "utf8")).text;
+const envoyer = (qs, buf) => prof.post("/api/lessons?" + new URLSearchParams(qs), buf, { "Content-Type": "application/octet-stream" });
+
+test("le prof importe des photos du cours : l'IA lit le texte et décrit les schémas", async () => {
+  const r = await envoyer({ filename: "IMG_2034.jpg", name: "Séismes (photos)" }, photo("ffd8ffe0", "Le seisme nait au foyer."));
+  assert.equal(r.status, 200);
+  const t = lessonText(r.data.id);
+  assert.match(t, /Le seisme nait au foyer/);
+  assert.match(t, /Schéma :/);
+  // 2e et 3e photos (PNG, WEBP) ajoutées à la même leçon, puis un PowerPoint de texte
+  assert.equal((await envoyer({ filename: "page2.png", append: r.data.id }, photo("89504e470d0a1a0a", "Page deux : epicentre."))).status, 200);
+  assert.equal((await envoyer({ filename: "page3.webp", append: r.data.id }, Buffer.concat([Buffer.from("RIFF0000WEBP", "latin1"), Buffer.from("TEXTE:Page trois.", "latin1")]))).status, 200);
+  const a = await prof.post("/api/lessons?" + new URLSearchParams({ filename: "notes.txt", append: r.data.id }), "Notes du prof : magnitude et intensite.", { "Content-Type": "text/plain" });
+  assert.equal(a.status, 200);
+  const tout = lessonText(r.data.id);
+  for (const m of [/Le seisme nait/, /image\/png/, /image\/webp/, /Page trois/, /=== page2\.png ===/, /magnitude et intensite/]) assert.match(tout, m);
+  assert.equal((await prof.get("/api/lessons")).data.lessons.filter(l => l.name === "Séismes (photos)").length, 1, "une seule leçon");
+  await prof.del("/api/lessons?id=" + r.data.id);
+});
+
+test("photo illisible, faux fichier image ou leçon inconnue : refus clair", async () => {
+  const flou = await envoyer({ filename: "flou.jpg" }, Buffer.from("ffd8ffe0000000", "hex"));
+  assert.equal(flou.status, 400);
+  assert.match(flou.data.error, /illisible/);
+  const faux = await envoyer({ filename: "virus.jpg" }, Buffer.from("MZ ceci n'est pas une image du tout, c'est un programme"));
+  assert.equal(faux.status, 400);
+  assert.match(faux.data.error, /pas lisible/);
+  assert.equal((await envoyer({ filename: "p.jpg", append: "lecon-inconnue" }, photo("ffd8ffe0", "Texte assez long pour passer."))).status, 404);
+  assert.equal((await envoyer({ filename: "p.jpg", append: "../../data/config" }, photo("ffd8ffe0", "Texte assez long pour passer."))).status, 404);
+});
+
 /* ---------- Droits ---------- */
 test("un élève ne peut pas utiliser les fonctions du professeur", async () => {
   assert.equal((await sara.get("/api/classes")).status, 403);
@@ -174,6 +224,7 @@ test("un élève ne peut pas utiliser les fonctions du professeur", async () => 
   assert.equal((await sara.del("/api/history?id=x")).status, 403);
   assert.equal((await sara.post("/api/lessons?filename=a.txt", "contenu du cours piraté".repeat(5), { "Content-Type": "text/plain" })).status, 403);
   assert.equal((await sara.post("/api/fetch-url", { urls: ["https://example.com"] })).status, 403);
+  assert.equal((await sara.post("/api/lessons?filename=p.jpg&append=" + LESSON, Buffer.from("ffd8ffe0", "hex"), { "Content-Type": "application/octet-stream" })).status, 403);
 });
 
 test("une personne non connectée n'a accès à rien", async () => {
@@ -297,6 +348,22 @@ test("seule une vraie image PNG est acceptée comme signature", async () => {
   assert.equal((await prof.put("/api/profile", { signature: "javascript:alert(1)" })).status, 400);
   assert.equal((await prof.put("/api/profile", { signature: "data:image/svg+xml;base64,PHN2Zz4=" })).status, 400);
   assert.equal((await prof.put("/api/profile", { signature: "data:image/png;base64,iVBORw0KGgo=" })).status, 200);
+});
+
+test("le prof personnalise ses documents : établissement, année, couleur, logo, cachet", async () => {
+  const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+  const r = await prof.put("/api/profile", { etablissement: "Collège Ibn Sina", annee: "2026-2027", couleur: "#AA3300", pied: "Bon courage !", logoEcole: png, cachet: png });
+  assert.equal(r.status, 200);
+  const p = (await sara.get("/api/profile")).data;
+  assert.equal(p.etablissement, "Collège Ibn Sina");
+  assert.equal(p.couleur, "#aa3300");
+  assert.equal(p.cachet, png);
+  assert.equal((await prof.put("/api/profile", { couleur: "red;background:url(x)" })).status, 400);
+  // un « PNG » qui n'en est pas un (ici un GIF déguisé) est refusé
+  assert.equal((await prof.put("/api/profile", { logoEcole: "data:image/png;base64,R0lGODlhAQABAAAAACw=" })).status, 400);
+  assert.equal((await prof.put("/api/profile", { cachet: "https://site-pirate.example/cachet.png" })).status, 400);
+  assert.equal((await prof.put("/api/profile", { cachet: "" })).status, 200, "on peut retirer le cachet");
+  assert.equal((await sara.put("/api/profile", { etablissement: "Pirate" })).status, 403);
 });
 
 /* ---------- Attaques classiques ---------- */

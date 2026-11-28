@@ -15,7 +15,19 @@ th{font-size:12px;color:var(--mut);font-weight:600;text-transform:uppercase;lett
 td select{padding:5px 8px}
 .mini{padding:5px 9px;font-size:13px}
 #pad{width:100%;height:170px;background:#fff;border:2px dashed var(--bd);border-radius:12px;touch-action:none;cursor:crosshair;display:block}
-#sigprev{max-height:80px;max-width:240px;background:#fff;border-radius:8px;padding:4px;display:block;margin-top:6px}
+.seg{display:flex;gap:4px;background:var(--bg);border-radius:12px;padding:4px;margin:10px 0 8px}
+.seg button{flex:1;border:0;background:none;border-radius:9px;padding:8px;font:inherit;font-size:14px;cursor:pointer;color:inherit}
+.seg button.on{background:var(--card,#fff);box-shadow:0 1px 3px rgba(0,0,0,.12);font-weight:600}
+.typed{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.typed button{background:#fff;color:#11233d;border:2px solid var(--bd);border-radius:10px;padding:6px;font-size:26px;cursor:pointer;min-height:64px}
+.typed button.on{border-color:var(--ac)}
+.imgs{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:12px}
+@media (max-width:600px){.imgs{grid-template-columns:1fr}}
+.imgs > div{border:1px solid var(--bd);border-radius:12px;padding:8px;text-align:center;font-size:13px}
+.imgs .pv{height:70px;display:flex;align-items:center;justify-content:center;background:#fff;border-radius:8px;margin:6px 0;color:#8a99ad}
+.imgs .pv img{max-height:66px;max-width:100%}
+.imgs .row{justify-content:center;gap:4px}
+input[type=color]{width:100%;height:42px;padding:2px;border-radius:10px}
 .full{grid-column:1/-1}
 #names{min-height:150px;font-size:14px}
 .newbox{background:var(--ac2);border-radius:12px;padding:12px;margin-top:12px}
@@ -53,20 +65,45 @@ td select{padding:5px 8px}
       <div class="hint" id="cmsg"></div>
     </div>
 
-    <div class="card">
-      <h2>✍️ Ma signature et mon nom</h2>
-      <p class="muted" style="font-size:14px;margin-top:0">Ils apparaissent en bas de chaque fiche de résumé en PDF.</p>
+    <div class="card full" id="doccard">
+      <h2>✍️ Mes documents : signature, logo, en-tête</h2>
+      <p class="muted" style="font-size:14px;margin-top:0">Tout ce qui est ici apparaît sur les fiches de résumé en PDF et sur les fiches de connexion des élèves. <a href="/resumes.html">Voir une fiche</a></p>
       <div class="row">
-        <div style="flex:1;min-width:160px"><label for="nom">Nom du professeur</label><input id="nom" maxlength="80"></div>
-        <div style="flex:1;min-width:120px"><label for="mat">Matière</label><input id="mat" maxlength="60"></div>
+        <div style="flex:2;min-width:160px"><label for="nom">Nom du professeur</label><input id="nom" maxlength="80" placeholder="Ex : M. Mehdi Belhaj"></div>
+        <div style="flex:1;min-width:120px"><label for="mat">Matière</label><input id="mat" maxlength="60" placeholder="SVT"></div>
+        <div style="flex:2;min-width:160px"><label for="etab">Établissement</label><input id="etab" maxlength="100" placeholder="Ex : Collège Ibn Sina, Marrakech"></div>
+        <div style="flex:1;min-width:110px"><label for="annee">Année scolaire</label><input id="annee" maxlength="20" placeholder="2026-2027"></div>
+        <div style="width:80px"><label for="coul">Couleur</label><input type="color" id="coul" value="#1d6cb3"></div>
       </div>
-      <label>Signe dans le cadre avec la souris (ou le doigt)</label>
-      <canvas id="pad" width="800" height="340"></canvas>
-      <div class="row" style="margin-top:8px">
-        <button class="btn sec" id="clear" type="button">🧽 Effacer</button>
-        <button class="btn" id="saveprof" type="button">💾 Enregistrer</button>
+      <label for="pied">Phrase en bas des fiches (facultatif)</label>
+      <input id="pied" maxlength="140" placeholder="Ex : Révise un peu chaque jour, tu vas y arriver !">
+
+      <label style="margin-top:14px">Ma signature</label>
+      <div class="seg" role="tablist">
+        <button type="button" data-t="import" class="on">📁 Importer une image</button>
+        <button type="button" data-t="type">⌨️ Écrire mon nom</button>
+        <button type="button" data-t="draw">✍️ Dessiner</button>
       </div>
-      <div id="sigbox" hidden><label>Signature actuelle</label><img id="sigprev" alt="Signature actuelle"></div>
+      <div data-p="import">
+        <p class="hint" style="margin:0">Signe sur une feuille blanche, prends-la en photo (ou scanne-la), puis choisis l’image : le fond blanc est retiré tout seul.</p>
+        <button class="btn sec" id="sigimp" type="button" style="margin-top:6px">📁 Choisir la photo de ma signature</button>
+      </div>
+      <div data-p="type" hidden>
+        <input id="sigtxt" maxlength="40" placeholder="Ton nom, tel que tu signes (ex : M. Belhaj)">
+        <div class="typed" id="typed"></div>
+      </div>
+      <div data-p="draw" hidden>
+        <canvas id="pad" width="800" height="340"></canvas>
+        <button class="btn sec mini" id="clear" type="button" style="margin-top:6px">🧽 Effacer</button>
+      </div>
+
+      <div class="imgs">
+        <div><b>Signature</b><div class="pv" id="pv-signature">aucune</div><div class="row"><button class="btn sec mini" type="button" data-del="signature">🗑️ Retirer</button></div></div>
+        <div><b>Logo de l’établissement</b><div class="pv" id="pv-logoEcole">aucun</div><div class="row"><button class="btn sec mini" type="button" data-imp="logoEcole">📁 Choisir</button><button class="btn sec mini" type="button" data-del="logoEcole">🗑️</button></div></div>
+        <div><b>Cachet</b><div class="pv" id="pv-cachet">aucun</div><div class="row"><button class="btn sec mini" type="button" data-imp="cachet">📁 Choisir</button><button class="btn sec mini" type="button" data-del="cachet">🗑️</button></div></div>
+      </div>
+      <input type="file" id="imgfile" accept="image/png,image/jpeg,image/webp" hidden>
+      <div class="row" style="margin-top:12px"><button class="btn" id="saveprof" type="button">💾 Enregistrer</button></div>
       <div class="hint" id="pmsg"></div>
     </div>
 
@@ -88,7 +125,7 @@ td select{padding:5px 8px}
         Si un élève l'oublie, clique sur « 🔑 Nouveau mot de passe ».
         <div class="row" style="margin:8px 0">
           <button class="btn" id="printf">🖨️ Imprimer les fiches</button>
-          <button class="btn sec" id="csvf">⬇️ Télécharger (Excel / CSV)</button>
+          <button class="btn sec" id="csvf">⬇️ Télécharger le fichier Excel</button>
           <button class="btn sec" id="closenew">Fermer</button>
         </div>
         <table><thead><tr><th>Élève</th><th>Identifiant</th><th>Mot de passe</th></tr></thead><tbody id="newlist"></tbody></table>
@@ -187,24 +224,127 @@ async function loadLessons() {
   }
 }
 
-/* ---------- Signature ---------- */
+/* ---------- Mes documents : signature, logo, cachet ---------- */
+let prof = {};                 // profil enregistré
+const pending = {};            // images modifiées pas encore enregistrées
+let sigMode = "import";
+function showImg(k) {
+  const v = k in pending ? pending[k] : prof[k];
+  const pv = $("pv-" + k); pv.innerHTML = "";
+  if (v) { const im = new Image(); im.src = v; im.alt = ""; pv.appendChild(im); }
+  else pv.textContent = k === "signature" ? "aucune" : "aucun";
+}
+const allImgs = () => ["signature", "logoEcole", "cachet"].forEach(showImg);
+
+/* Prépare une image : fond clair rendu transparent (signature, cachet), recadrage, taille raisonnable */
+function prepareImage(file, { transparent, maxW, maxH }) {
+  return new Promise((ok, ko) => {
+    if (!/^image\/(png|jpeg|webp)$/.test(file.type)) return ko(new Error("Choisis une image JPG, PNG ou WEBP. (Photo d’iPhone en HEIC : fais une capture d’écran de la photo.)"));
+    if (file.size > 15 * 1024 * 1024) return ko(new Error("Image trop lourde (15 Mo maximum)."));
+    const rd = new FileReader();
+    rd.onerror = () => ko(new Error("Image illisible."));
+    rd.onload = () => {
+      const img = new Image();
+      img.onerror = () => ko(new Error("Image illisible."));
+      img.onload = () => {
+        // 1) image réduite à une taille de travail
+        const k0 = Math.min(1, 1600 / Math.max(img.width, img.height));
+        const W = Math.round(img.width * k0), H = Math.round(img.height * k0);
+        const c = document.createElement("canvas"); c.width = W; c.height = H;
+        const g = c.getContext("2d", { willReadFrequently: true }); g.drawImage(img, 0, 0, W, H);
+        const id = g.getImageData(0, 0, W, H), d = id.data;
+        const lum = i => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        if (transparent) {
+          // fond = luminosité moyenne des bords ; ce qui est nettement plus foncé est gardé (l'encre)
+          let sum = 0, n = 0;
+          for (let x = 0; x < W; x += 4) { sum += lum(x * 4) + lum(((H - 1) * W + x) * 4); n += 2; }
+          for (let y = 0; y < H; y += 4) { sum += lum(y * W * 4) + lum((y * W + W - 1) * 4); n += 2; }
+          const bg = sum / n, seuil = bg * 0.72;
+          for (let i = 0; i < d.length; i += 4) {
+            const L = lum(i);
+            if (L >= seuil) d[i + 3] = 0;
+            else { const a = Math.min(1, (seuil - L) / (seuil * 0.35)); d[i + 3] = Math.round(255 * a); }
+          }
+          g.putImageData(id, 0, 0);
+        }
+        // 2) recadrage autour de ce qui est visible
+        let x0 = W, y0 = H, x1 = -1, y1 = -1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (transparent ? d[i + 3] > 40 : true) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        if (x1 < 0) return ko(new Error("Rien de visible sur l’image : prends la photo avec une encre foncée sur une feuille blanche."));
+        const m = 6; x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(W - 1, x1 + m); y1 = Math.min(H - 1, y1 + m);
+        const cw = x1 - x0 + 1, ch = y1 - y0 + 1, k = Math.min(1, maxW / cw, maxH / ch);
+        const out = document.createElement("canvas"); out.width = Math.max(1, Math.round(cw * k)); out.height = Math.max(1, Math.round(ch * k));
+        const og = out.getContext("2d"); og.imageSmoothingQuality = "high";
+        og.drawImage(c, x0, y0, cw, ch, 0, 0, out.width, out.height);
+        ok(out.toDataURL("image/png"));
+      };
+      img.src = rd.result;
+    };
+    rd.readAsDataURL(file);
+  });
+}
+const IMG_OPTS = { signature: { transparent: true, maxW: 600, maxH: 220 }, cachet: { transparent: true, maxW: 400, maxH: 400 }, logoEcole: { transparent: false, maxW: 500, maxH: 300 } };
+let imgTarget = null;
+$("sigimp").onclick = () => { imgTarget = "signature"; $("imgfile").click(); };
+document.querySelectorAll("[data-imp]").forEach(b => b.onclick = () => { imgTarget = b.dataset.imp; $("imgfile").click(); });
+$("imgfile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f || !imgTarget) return;
+  try { pending[imgTarget] = await prepareImage(f, IMG_OPTS[imgTarget]); if (imgTarget === "signature") typedOn = false; showImg(imgTarget); msg("pmsg", "Aperçu prêt. Clique sur « 💾 Enregistrer » pour le garder.", "ok"); }
+  catch (err) { msg("pmsg", err.message, "err"); }
+};
+document.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { pending[b.dataset.del] = ""; if (b.dataset.del === "signature") typedOn = false; showImg(b.dataset.del); msg("pmsg", "Clique sur « 💾 Enregistrer » pour confirmer.", ""); });
+
+/* Onglets de la signature */
+document.querySelectorAll(".seg button").forEach(b => b.onclick = () => {
+  sigMode = b.dataset.t;
+  document.querySelectorAll(".seg button").forEach(x => x.classList.toggle("on", x === b));
+  document.querySelectorAll("[data-p]").forEach(p => p.hidden = p.dataset.p !== sigMode);
+  if (sigMode === "type") renderTyped();
+});
+
+/* Signature écrite avec une police manuscrite (polices déjà présentes sur l'ordinateur) */
+const FONTS = ["'Segoe Script', 'Brush Script MT', cursive", "'Lucida Handwriting', 'Segoe Script', cursive", "'Brush Script MT', 'Comic Sans MS', cursive"];
+let fontIdx = 0, typedOn = false;   // typedOn : la signature en attente vient de « Écrire mon nom »
+function typedPNG(text, font) {
+  const c = document.createElement("canvas"), g = c.getContext("2d");
+  const f = "italic 64px " + font; g.font = f;
+  const w = Math.ceil(g.measureText(text).width) + 30;
+  c.width = Math.min(1200, w); c.height = 110;
+  g.font = f; g.fillStyle = "#11233d"; g.textBaseline = "middle"; g.fillText(text, 15, 58);
+  return c.toDataURL("image/png");
+}
+function renderTyped() {
+  const t = $("sigtxt").value.trim() || $("nom").value.trim() || "Signature";
+  const box = $("typed"); box.innerHTML = "";
+  FONTS.forEach((f, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.style.fontFamily = f; b.style.fontStyle = "italic"; b.textContent = t;
+    b.classList.toggle("on", typedOn && i === fontIdx);
+    b.onclick = () => { fontIdx = i; typedOn = true; pending.signature = typedPNG(t, f); showImg("signature"); renderTyped(); };
+    box.appendChild(b);
+  });
+}
+$("sigtxt").oninput = () => { if (typedOn) { pending.signature = typedPNG($("sigtxt").value.trim() || "Signature", FONTS[fontIdx]); showImg("signature"); } renderTyped(); };
+
+/* Dessin à la souris ou au doigt */
 const pad = $("pad"), ctx = pad.getContext("2d");
-let drawing = false, drawn = false, last = null;
+let drawing = false, last = null;
 function pos(e) { const r = pad.getBoundingClientRect(); return { x: (e.clientX - r.left) * pad.width / r.width, y: (e.clientY - r.top) * pad.height / r.height }; }
-function clearPad() { ctx.clearRect(0, 0, pad.width, pad.height); drawn = false; }
+function clearPad() { ctx.clearRect(0, 0, pad.width, pad.height); }
 pad.addEventListener("pointerdown", e => { drawing = true; last = pos(e); pad.setPointerCapture(e.pointerId); });
 pad.addEventListener("pointermove", e => {
   if (!drawing) return;
   const p = pos(e);
   ctx.strokeStyle = "#11233d"; ctx.lineWidth = 5; ctx.lineCap = "round"; ctx.lineJoin = "round";
   ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-  last = p; drawn = true;
+  last = p;
 });
-["pointerup", "pointercancel", "pointerleave"].forEach(ev => pad.addEventListener(ev, () => { drawing = false; }));
-$("clear").onclick = clearPad;
-
-/* Recadre la signature autour du tracé (PNG transparent) */
-function signaturePNG() {
+["pointerup", "pointercancel"].forEach(ev => pad.addEventListener(ev, () => { if (drawing) { drawing = false; const v = padPNG(); if (v) { pending.signature = v; typedOn = false; showImg("signature"); } } }));
+$("clear").onclick = () => { clearPad(); delete pending.signature; showImg("signature"); };
+/* Recadre le dessin autour du tracé (PNG transparent) */
+function padPNG() {
   const d = ctx.getImageData(0, 0, pad.width, pad.height).data;
   let x0 = pad.width, y0 = pad.height, x1 = 0, y1 = 0;
   for (let y = 0; y < pad.height; y++) for (let x = 0; x < pad.width; x++)
@@ -215,17 +355,23 @@ function signaturePNG() {
   c.getContext("2d").drawImage(pad, x0 - m, y0 - m, w, h, 0, 0, w, h);
   return c.toDataURL("image/png");
 }
+
+function fillProfile(p) {
+  prof = p;
+  $("nom").value = p.nom || ""; $("mat").value = p.matiere || ""; $("etab").value = p.etablissement || "";
+  $("annee").value = p.annee || ""; $("pied").value = p.pied || ""; $("coul").value = p.couleur || "#1d6cb3";
+  for (const k in pending) delete pending[k];
+  typedOn = false; allImgs();
+}
 $("saveprof").onclick = async () => {
-  const body = { nom: $("nom").value, matiere: $("mat").value };
-  if (drawn) body.signature = signaturePNG();
+  const body = { nom: $("nom").value, matiere: $("mat").value, etablissement: $("etab").value, annee: $("annee").value, pied: $("pied").value, couleur: $("coul").value, ...pending };
   try {
     const p = await api("/api/profile", { method: "PUT", body });
-    showSig(p.signature); clearPad();
-    msg("pmsg", "Enregistré." + (body.signature ? " Ta signature apparaîtra sur les PDF." : ""), "ok");
+    fillProfile(p); clearPad();
+    msg("pmsg", "Enregistré. Tout apparaîtra sur les fiches en PDF.", "ok");
     $("sub").textContent = [p.nom, p.matiere].filter(Boolean).join(" · ") || "MEHDI 2.0";
   } catch (e) { msg("pmsg", e.message, "err"); }
 };
-function showSig(s) { $("sigbox").hidden = !s; if (s) $("sigprev").src = s; }
 
 /* ---------- Mot de passe prof ---------- */
 $("pwform").onsubmit = async e => {
@@ -318,28 +464,31 @@ $("printf").onclick = () => {
     const img = new Image(); img.src = "/logo.png"; img.alt = "";
     const t = document.createElement("div"); t.innerHTML = "<b></b><br><span></span><br><br>Site : <span></span><br>Identifiant : <span class='code'></span><br>Mot de passe : <span class='code'></span><br><br><span style='font-size:11px'>Garde ce mot de passe secret, ne le donne à personne.</span>";
     const sp = t.querySelectorAll("b, span");
-    sp[0].textContent = e.name; sp[1].textContent = e.className || ""; sp[2].textContent = site; sp[3].textContent = e.login; sp[4].textContent = e.password;
+    sp[0].textContent = e.name; sp[1].textContent = [e.className, prof.etablissement].filter(Boolean).join(" · "); sp[2].textContent = site; sp[3].textContent = e.login; sp[4].textContent = e.password;
     d.append(img, t); f.appendChild(d);
   }
   setTimeout(() => print(), 300);
 };
-/* Fichier CSV (s'ouvre dans Excel) */
-$("csvf").onclick = () => {
-  const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
-  const rows = [["Élève", "Classe", "Identifiant", "Mot de passe", "Site"], ...lastCreated.map(e => [e.name, e.className || "", e.login, e.password, location.origin])];
-  const blob = new Blob(["\ufeff" + rows.map(r => r.map(esc).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = "comptes-" + (($("scls").selectedOptions[0]?.textContent || "classe").replace(/\s*\(\d+\)$/, "").replace(/[^\w-]+/g, "-")) + ".csv";
-  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+/* Vrai fichier Excel (.xlsx) : s'ouvre bien dans Excel, quelle que soit la langue de Windows */
+$("csvf").onclick = async () => {
+  const cls = ($("scls").selectedOptions[0]?.textContent || "classe").replace(/\s*\(\d+\)$/, "");
+  $("csvf").disabled = true;
+  try {
+    const r = await fetch("/api/students/xlsx", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
+      body: JSON.stringify({ title: cls, site: location.origin, rows: lastCreated.map(e => ({ name: e.name, className: e.className, login: e.login, password: e.password })) }) });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Export impossible.");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob());
+    a.download = "comptes-" + cls.replace(/[^\w\u00C0-\u024F-]+/g, "-") + ".xlsx";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  } catch (e) { msg("smsg", e.message, "err"); }
+  $("csvf").disabled = false;
 };
 window.addEventListener("beforeunload", e => { if (lastCreated.length && !$("newbox").hidden) { e.preventDefault(); e.returnValue = ""; } });
 
 async function loadAll() { await loadClasses(); await loadStudents(); await loadLessons(); }
 (async () => {
   await MEHDI.init("prof", { profOnly: true });
-  const p = await api("/api/profile");
-  $("nom").value = p.nom || ""; $("mat").value = p.matiere || "";
-  showSig(p.signature);
+  fillProfile(await api("/api/profile"));
   await loadAll();
   if (!classes.length) $("cname").focus();
 })();

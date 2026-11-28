@@ -14,7 +14,7 @@ Le fichier `.github/workflows/devsecops.yml` se lance à chaque `push`, à chaqu
 |---|---|---|
 | 🔑 Secrets | Gitleaks | Aucune clé ni mot de passe dans le code ni dans **tout l'historique** Git (règle ajoutée pour les clés Gemini au format `AQ.`) |
 | 📦 Dépendances | npm audit, `npm audit signatures`, Dependabot | Failles connues dans `jszip` / `unpdf`, signatures des paquets, mises à jour proposées chaque semaine |
-| 🧪 Tests | `node:test` + faux Gemini | 28 tests : comptes élèves individuels, résumés de séance, droits élève / prof, cloisonnement des classes, CSRF, SSRF, traversée de dossier, plantage, déconnexion… |
+| 🧪 Tests | `node:test` + faux Gemini | 32 tests : comptes élèves individuels, résumés de séance, photos de cours (vrai type vérifié), droits élève / prof, cloisonnement des classes, CSRF, SSRF, traversée de dossier, plantage, déconnexion… |
 | 🔍 SAST | Semgrep (règles JavaScript, Node.js, OWASP Top 10) | Injection, XSS, chemins de fichiers dangereux dans le code |
 | 🛡️ DAST | OWASP ZAP (baseline) | Le serveur lancé pour de vrai : en-têtes, cookies, fuite d'informations |
 

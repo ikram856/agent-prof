@@ -11,7 +11,7 @@ A classroom assistant that helps middle-school students during a lesson. The tea
 - **Questions / Debate / Quiz** — three modes; the debate starts right away with a question taken from the course
 - **History** — every conversation is saved on the server; the teacher sees all students' conversations, each student sees their own
 - **Course summaries** — AI-drafted summary + mind map per lesson, edited by the teacher, exported as a signed PDF
-- **Course upload** — PDF, PowerPoint `.pptx`, text, or web links; each lesson can be assigned to a class
+- **Course upload** — PDF, PowerPoint `.pptx`, text, web links, or **photos** (textbook pages, diagrams: the AI transcribes the text and describes the figures); several sources can be combined in one lesson, and each lesson can be assigned to a class
 - **Streaming answers** — replies appear word by word and keep going even if the page is reloaded
 - **Classroom tools** — projection mode, POUR / CONTRE poll, speaking timer, voice dictation
 

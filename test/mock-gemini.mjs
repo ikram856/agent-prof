@@ -6,7 +6,14 @@ import http from "node:http";
 import { fileURLToPath } from "node:url";
 
 function replyFor(body) {
-  const last = body.contents?.at(-1)?.parts?.[0]?.text || "";
+  const parts = body.contents?.at(-1)?.parts || [];
+  const last = parts.find(p => p.text)?.text || "";
+  const img = parts.find(p => p.inline_data);
+  if (img) {   // photo : on « lit » le texte écrit dans l'image de test (après le marqueur TEXTE:)
+    const brut = Buffer.from(img.inline_data.data, "base64").toString("latin1");
+    const m = brut.match(/TEXTE:([^\0]*)/);
+    return m ? "Transcription (" + img.inline_data.mime_type + ") : " + m[1].trim() + "\nSchéma : coupe de la Terre avec le foyer et l'épicentre." : "ILLISIBLE";
+  }
   if (/fiche de révision/.test(last))
     return "RÉSUMÉ:\nUn séisme est une vibration du sol.\n- Il naît au foyer.\n\nCARTE:\nLes séismes\n- Origine\n  - rupture des roches\n- Prévention\n  - normes parasismiques";
   if (/RÉSUMÉ DE SÉANCE/.test(last)) {
