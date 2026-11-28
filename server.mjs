@@ -2,6 +2,8 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import dns from "node:dns/promises";
+import net from "node:net";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { extractText, getDocumentProxy } from "unpdf";
@@ -14,8 +16,9 @@ import { extractText, getDocumentProxy } from "unpdf";
    ===================================================================== */
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const COURS = path.join(dir, "cours");
-const DATA = path.join(dir, "data");
+// Dossiers modifiables par variables d'environnement (utile pour les tests et l'hébergement)
+const COURS = process.env.COURS_DIR || path.join(dir, "cours");
+const DATA = process.env.DATA_DIR || path.join(dir, "data");
 const CONVS = path.join(DATA, "conversations");
 const RESUMES = path.join(DATA, "resumes");
 for (const d of [COURS, DATA, CONVS, RESUMES]) fs.mkdirSync(d, { recursive: true });
@@ -23,6 +26,9 @@ for (const d of [COURS, DATA, CONVS, RESUMES]) fs.mkdirSync(d, { recursive: true
 const KEY = process.env.GEMINI_API_KEY;
 if (!KEY) console.error("ATTENTION : GEMINI_API_KEY est vide. Lance le serveur avec : node --env-file=.env server.mjs");
 const PORT = process.env.PORT || 3000;
+const GEMINI_BASE = (process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com").replace(/\/$/, "");
+// En production derrière HTTPS : COOKIE_SECURE=1 (cookie « Secure » + HSTS)
+const HTTPS = process.env.COOKIE_SECURE === "1";
 const MODELS = [
   // Modèles « Flash-Lite » d'abord : les plus rapides et les moins surchargés
   process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
@@ -94,7 +100,7 @@ function createSession(data, hours) {
   const sid = crypto.randomBytes(24).toString("hex");
   sessions[sid] = { ...data, exp: Date.now() + hours * 3600e3 };
   saveSessions();
-  return `sid=${sid}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${hours * 3600}`;
+  return `sid=${sid}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${hours * 3600}` + (HTTPS ? "; Secure" : "");
 }
 function getSession(req) {
   const m = (req.headers.cookie || "").match(/(?:^|;\s*)sid=([a-f0-9]{48})/);
@@ -148,11 +154,45 @@ function extractTitle(html) {
   return m ? m[1].trim() : "";
 }
 
+/* Protection SSRF : l'import par liens ne doit jamais atteindre le PC lui-même,
+   le réseau local (box, imprimantes…) ou les adresses réservées. */
+const BLOCKED = new net.BlockList();
+for (const [a, p] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16], ["172.16.0.0", 12],
+  ["192.0.0.0", 24], ["192.0.2.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["198.51.100.0", 24], ["203.0.113.0", 24], ["224.0.0.0", 3]])
+  BLOCKED.addSubnet(a, p, "ipv4");
+for (const [a, p] of [["::", 128], ["::1", 128], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["2001:db8::", 32], ["64:ff9b::", 96]])
+  BLOCKED.addSubnet(a, p, "ipv6");
+function isBlockedIP(ip) {
+  const v4 = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);   // IPv4 déguisée en IPv6
+  if (v4) ip = v4[1];
+  return BLOCKED.check(ip, net.isIPv6(ip) ? "ipv6" : "ipv4");
+}
+async function assertPublicUrl(u) {
+  if (!["http:", "https:"].includes(u.protocol)) throw new Error("Seuls les liens http et https sont acceptés");
+  if (u.username || u.password) throw new Error("Lien avec identifiants refusé");
+  if (u.port && !["80", "443"].includes(u.port)) throw new Error("Port non autorisé");
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  const addrs = net.isIP(host) ? [{ address: host }] : await dns.lookup(host, { all: true }).catch(() => []);
+  if (!addrs.length) throw new Error("Site introuvable");
+  if (addrs.some(a => isBlockedIP(a.address))) throw new Error("Adresse interne ou privée refusée");
+}
 async function fetchUrl(url) {
-  const r = await fetch(url, {
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; CourseBot/1.0)" },
-    signal: AbortSignal.timeout(15000)
-  });
+  // Les redirections sont suivies à la main pour vérifier chaque adresse
+  let u = new URL(url), r;
+  for (let i = 0; ; i++) {
+    await assertPublicUrl(u);
+    r = await fetch(u, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; CourseBot/1.0)" },
+      redirect: "manual",
+      signal: AbortSignal.timeout(15000)
+    });
+    if (r.status >= 300 && r.status < 400 && r.headers.get("location")) {
+      if (i >= 3) throw new Error("Trop de redirections");
+      u = new URL(r.headers.get("location"), u);
+      continue;
+    }
+    break;
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status} pour ${url}`);
   const ct = r.headers.get("content-type") || "";
   if (!ct.includes("text/html") && !ct.includes("text/plain")) throw new Error(`Type non supporté (${ct}) pour ${url}`);
@@ -221,7 +261,7 @@ async function streamModel(model, payload, onDelta) {
   const t2 = setTimeout(() => ctrl.abort(new Error("TimeoutError")), TOTAL_TIMEOUT);
   try {
     const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`,
+      `${GEMINI_BASE}/v1beta/models/${model}:streamGenerateContent?alt=sse`,
       { method: "POST", headers: { "x-goog-api-key": KEY, "Content-Type": "application/json" }, body: JSON.stringify(payload), signal: ctrl.signal }
     );
     if (!r.ok) {
@@ -476,7 +516,7 @@ route("POST", "/api/login", {}, async ({ req, ip }) => {
 
 route("POST", "/api/logout", {}, async ({ s }) => {
   if (s) { delete sessions[s.sid]; saveSessions(); }
-  return [200, { ok: true }, { "Set-Cookie": "sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0" }];
+  return [200, { ok: true }, { "Set-Cookie": "sid=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" + (HTTPS ? "; Secure" : "") }];
 });
 
 /* --- Profil du professeur (nom, matière, signature) --- */
@@ -740,10 +780,55 @@ route("POST", "/api/resume/generate", { auth: "prof" }, async ({ req }) => {
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".ico": "image/x-icon" };
 const PUBLIC = path.join(dir, "public");
 
-const server = http.createServer(async (req, res) => {
+/* Content-Security-Policy : seuls les scripts du site sont autorisés.
+   Les scripts écrits dans les pages sont autorisés par leur empreinte SHA-256,
+   calculée au démarrage : un script injecté (XSS) n'a pas la bonne empreinte et est bloqué. */
+function inlineScriptHashes() {
+  const hashes = new Set();
+  for (const f of fs.readdirSync(PUBLIC).filter(f => f.endsWith(".html"))) {
+    const html = fs.readFileSync(path.join(PUBLIC, f), "utf8");
+    for (const m of html.matchAll(/<script>([\s\S]*?)<\/script>/g))
+      hashes.add("'sha256-" + crypto.createHash("sha256").update(m[1], "utf8").digest("base64") + "'");
+  }
+  return [...hashes].join(" ");
+}
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' " + inlineScriptHashes(),
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "media-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'"
+].join("; ");
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": CSP,
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  ...(HTTPS ? { "Strict-Transport-Security": "max-age=31536000; includeSubDomains" } : {})
+};
+
+/* Protection CSRF : une requête qui modifie quelque chose doit venir de ce site */
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;   // navigateurs anciens / outils en ligne de commande : le cookie SameSite=Strict protège déjà
+  try { return new URL(origin).host === req.headers.host; } catch { return false; }
+}
+
+async function handle(req, res) {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
   const url = new URL(req.url, "http://localhost");
   const r = routes[req.method + " " + url.pathname];
   if (r) {
+    if (req.method !== "GET" && !sameOrigin(req)) return json(res, 403, { error: "Requête refusée (origine différente)." });
     const s = getSession(req);
     const ip = req.socket.remoteAddress || "";
     try {
@@ -759,19 +844,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname.startsWith("/api/")) return json(res, 404, { error: "Introuvable." });
+  if (req.method !== "GET" && req.method !== "HEAD") { res.writeHead(405, { Allow: "GET, HEAD" }); return res.end(); }
 
   // Fichiers de la page (dossier public/)
-  let p = decodeURIComponent(url.pathname);
+  let p;
+  try { p = decodeURIComponent(url.pathname); } catch { res.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" }); return res.end("Adresse invalide"); }
   if (p === "/") p = "/index.html";
   const file = path.join(PUBLIC, p);
-  if (file.startsWith(PUBLIC + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
+  if (!p.includes("\0") && file.startsWith(PUBLIC + path.sep) && fs.existsSync(file) && fs.statSync(file).isFile()) {
     const type = TYPES[path.extname(file).toLowerCase()] || "application/octet-stream";
     res.writeHead(200, { "Content-Type": type + (type.startsWith("text/") ? "; charset=utf-8" : ""), "Cache-Control": "no-cache" });
-    res.end(fs.readFileSync(file));
+    res.end(req.method === "HEAD" ? undefined : fs.readFileSync(file));
   } else {
     res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }); res.end("Introuvable");
   }
+}
+
+// Une erreur imprévue sur une requête ne doit jamais arrêter le serveur pour toute la classe
+const server = http.createServer((req, res) => {
+  handle(req, res).catch(e => {
+    log("Erreur inattendue :", e.message);
+    if (!res.headersSent) { res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }); res.end("Erreur du serveur"); }
+    else if (!res.writableEnded) res.end();
+  });
 });
+server.headersTimeout = 20000;
+server.requestTimeout = 120000;
 
 server.listen(PORT, () => {
   log("Serveur prêt : http://localhost:" + PORT, "| modèles :", MODELS.join(", "));

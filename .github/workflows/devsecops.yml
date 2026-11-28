@@ -1,0 +1,121 @@
+# Pipeline DevSecOps de MEHDI 2.0
+# Se lance à chaque push, à chaque pull request, et chaque lundi
+# (pour repérer les nouvelles failles publiées dans les dépendances).
+name: DevSecOps
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# Principe du moindre privilège : le pipeline ne peut que lire le dépôt
+permissions:
+  contents: read
+
+concurrency:
+  group: devsecops-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: "🔑 Secrets (Gitleaks)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # tout l'historique : un secret supprimé reste dans les anciens commits
+      - name: Recherche de clés et mots de passe dans tout l'historique
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            git /repo --config /repo/.gitleaks.toml --redact --verbose --exit-code 1
+
+  dependencies:
+    name: "📦 Dépendances (npm audit)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Installation exacte depuis package-lock.json (sans scripts d'installation)
+        run: npm ci --ignore-scripts
+      - name: Failles connues (niveau élevé ou critique)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Signatures des paquets npm (chaîne d'approvisionnement)
+        run: npm audit signatures
+
+  tests:
+    name: "🧪 Tests automatiques"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+
+  sast:
+    name: "🔍 Analyse du code (Semgrep)"
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recherche de failles dans le code (injection, XSS, chemins de fichiers…)
+        run: |
+          semgrep scan \
+            --config p/javascript --config p/nodejsscan --config p/owasp-top-ten --config p/secrets \
+            --exclude node_modules --exclude test --exclude "*.ancien.*" \
+            --severity ERROR --error --metrics=off \
+            --sarif --output semgrep.sarif || code=$?
+          semgrep scan \
+            --config p/javascript --config p/nodejsscan --config p/owasp-top-ten --config p/secrets \
+            --exclude node_modules --exclude test --exclude "*.ancien.*" --metrics=off --text
+          exit ${code:-0}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-semgrep
+          path: semgrep.sarif
+
+  dast:
+    name: "🛡️ Test d'attaque (OWASP ZAP)"
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Démarrage du serveur avec un faux Gemini (aucune vraie clé)
+        run: |
+          node test/mock-gemini.mjs 4001 &
+          mkdir -p "$RUNNER_TEMP/cours"
+          cp test/fixtures/cours/*.json "$RUNNER_TEMP/cours/"
+          GEMINI_API_KEY=ci GEMINI_BASE_URL=http://127.0.0.1:4001 \
+          DATA_DIR="$RUNNER_TEMP/data" COURS_DIR="$RUNNER_TEMP/cours" \
+          PROF_PASSWORD="ci-$(openssl rand -hex 12)" \
+          node server.mjs > serveur.log 2>&1 &
+          for i in $(seq 1 30); do curl -fs http://localhost:3000/login.html > /dev/null && break; sleep 1; done
+          curl -fsI http://localhost:3000/login.html
+      - name: Scan OWASP ZAP (baseline)
+        run: |
+          mkdir -p zap && cp .zap/rules.tsv zap/ && chmod -R 777 zap
+          docker run --rm --network host -v "$PWD/zap:/zap/wrk:rw" ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py -t http://localhost:3000/ -c rules.tsv -r rapport-zap.html -J rapport-zap.json -I
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapport-zap
+          path: |
+            zap/rapport-zap.html
+            zap/rapport-zap.json
+            serveur.log

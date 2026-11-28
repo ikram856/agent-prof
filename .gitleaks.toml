@@ -1,0 +1,22 @@
+# Configuration de Gitleaks (recherche de secrets dans le dépôt)
+title = "MEHDI 2.0"
+
+[extend]
+useDefault = true
+
+# Clés Google AI Studio au format récent « AQ.… » (non couvert par les règles par défaut)
+[[rules]]
+id = "google-ai-studio-key"
+description = "Clé API Google AI Studio / Gemini (format AQ.)"
+regex = '''\bAQ\.[A-Za-z0-9_\-]{40,}'''
+keywords = ["AQ."]
+tags = ["key", "google", "gemini"]
+
+# Faux identifiants des tests et modèle de configuration : ce ne sont pas des secrets
+[allowlist]
+description = "Faux identifiants des tests, du pipeline et du modèle .env.example"
+paths = [
+  '''^test/''',
+  '''^\.github/workflows/''',
+  '''^\.env\.example$'''
+]

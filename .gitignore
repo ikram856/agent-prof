@@ -4,6 +4,10 @@ cours/
 data/
 conversations/
 
+# rapports du pipeline
+zap/
+semgrep.sarif
+
 # copies de sauvegarde
 *.ancien.*
 server1.mjs
